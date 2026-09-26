@@ -1,0 +1,5 @@
+"Facility.ID","Facility.Name","Address","City.Town","State","ZIP.Code","County.Parish","Telephone.Number","Meets.criteria.for.promoting.interoperability.of.EHRs","Start.Date","End.Date","CEHRT.ID","chpl_id","product_database_id","developer_name","product_name"
+"260095","CENTERPOINT MEDICAL CENTER","19600 EAST 39TH STREET","INDEPENDENCE","MO","64057","JACKSON","(816) 698-7000","Y","01/01/2023","12/31/2023","0015C622YQ4JDC3","15.02.04.2391.Sure.02.01.1.211209","10747","Surescripts, LLC","Surescripts Clinical Direct Messaging"
+"440150","TRISTAR SUMMIT MEDICAL CENTER","5655 FRIST BLVD","HERMITAGE","TN","37076","DAVIDSON","(615) 316-3000","Y","01/01/2023","12/31/2023","0015C622YQ4JDC3","15.02.04.2391.Sure.02.01.1.211209","10747","Surescripts, LLC","Surescripts Clinical Direct Messaging"
+"140155","PRESENCE ST MARYS HOSPITAL","500 W COURT ST","KANKAKEE","IL","60901","KANKAKEE","(815) 937-2490","Y","01/01/2023","12/31/2023","0015C9AJN70CCV5","15.02.04.2391.Sure.02.01.1.211209","10747","Surescripts, LLC","Surescripts Clinical Direct Messaging"
+"NOT-A-CCN","not a hospital","","","","","","","","","","","","","",""

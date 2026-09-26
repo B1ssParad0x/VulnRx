@@ -81,6 +81,9 @@ pub struct Product {
     pub name: String,
     pub cpe_string: Option<String>,
     pub version: Option<String>,
+    /// ONC CHPL product number. Not a CPE string.
+    pub chpl_id: Option<String>,
+    pub chpl_database_id: Option<String>,
 }
 
 #[cfg(test)]

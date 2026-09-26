@@ -22,3 +22,14 @@ cargo run -p vulnrx-models --bin migrate
 ```bash
 cargo test -p vulnrx-models
 ```
+
+## Hospital products
+
+[`vulnrx-etl`](crates/etl) loads the ONC file that joins CMS Promoting Interoperability hospital reports to CHPL products. Each stored link keeps that file URL as its source. The CHPL API itself requires a key; this file is the public join ONC already published.
+
+```bash
+cargo run -p vulnrx-etl
+cargo run -p vulnrx-etl -- --state MO
+```
+
+`--state` limits the load to one USPS code. The default reads every row in the file.

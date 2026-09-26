@@ -14,6 +14,9 @@ pub struct Hospital {
     pub aliases: Vec<String>,
     pub city: Option<String>,
     pub state: Option<String>,
+    pub address: Option<String>,
+    pub zip: Option<String>,
+    pub phone: Option<String>,
     pub is_public_entity: bool,
 }
 
@@ -56,6 +59,9 @@ mod tests {
             aliases: Vec::new(),
             city: None,
             state: None,
+            address: None,
+            zip: None,
+            phone: None,
             is_public_entity: false,
         }
     }
