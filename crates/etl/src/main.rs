@@ -85,6 +85,21 @@ async fn run() -> Result<ExitCode, vulnrx_etl::IngestError> {
             );
             Ok(ExitCode::SUCCESS)
         }
+        Command::Breaches { state } => {
+            let records = vulnrx_etl::fetch_breach_portal().await?;
+            let report = vulnrx_etl::ingest_breaches(
+                &pool,
+                &records,
+                vulnrx_etl::BREACH_PORTAL_URL,
+                state.as_deref(),
+            )
+            .await?;
+            println!(
+                "ocr breach portal: fetched {} rows, upserted {}, linked {} hospitals and {} vendors",
+                report.fetched, report.stored, report.linked_hospitals, report.linked_vendors
+            );
+            Ok(ExitCode::SUCCESS)
+        }
     }
 }
 
@@ -103,6 +118,9 @@ enum Command {
         url: Option<String>,
     },
     ExpandCehrt,
+    Breaches {
+        state: Option<String>,
+    },
 }
 
 fn parse_args() -> Result<Command, String> {
@@ -122,6 +140,10 @@ fn parse_args() -> Result<Command, String> {
         Some("expand-cehrt") => {
             raw.remove(0);
             "expand-cehrt"
+        }
+        Some("breaches") => {
+            raw.remove(0);
+            "breaches"
         }
         Some("pi") => {
             raw.remove(0);
@@ -150,6 +172,12 @@ fn parse_args() -> Result<Command, String> {
             }
             Command::ExpandCehrt
         }
+        "breaches" => {
+            if url.is_some() {
+                return Err(usage());
+            }
+            Command::Breaches { state }
+        }
         _ => Command::Pi { state, url },
     })
 }
@@ -160,11 +188,13 @@ fn usage() -> String {
      vulnrx-etl hospitals [--state XX] [--url CSV_URL]\n\
      vulnrx-etl pi-2024 [--state XX] [--url CSV_URL]\n\
      vulnrx-etl expand-cehrt\n\
+     vulnrx-etl breaches [--state XX]\n\
      \n\
      pi loads the 2023 ONC file that already joins hospitals to CHPL products.\n\
      hospitals loads every Medicare-registered hospital. It does not invent vendor links.\n\
      pi-2024 stores the 2024 certified-product bundle id reported by each hospital.\n\
      expand-cehrt asks CHPL which products are inside those bundle ids. It requires CHPL_API_KEY.\n\
+     breaches reads the HHS OCR breach portal and links a row to a hospital only when the name and state match one facility.\n\
      With no command, pi is used."
         .to_string()
 }

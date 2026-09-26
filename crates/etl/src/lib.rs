@@ -1,10 +1,14 @@
 //! Load public CMS and ONC files into the VulnRx store.
 
+mod breaches;
 mod chpl;
 mod hospitals;
 mod load;
 mod pi2024;
 
+pub use breaches::{
+    BREACH_PORTAL_URL, BreachRecord, BreachReport, fetch_breach_portal, ingest_breaches,
+};
 pub use chpl::{BundleProduct, CehrtBundle, ExpandReport, expand_cehrt, link_cehrt_bundles};
 pub use hospitals::{HOSPITAL_REGISTRY_URL, HospitalLoadReport, ingest_hospital_registry};
 pub use load::{IngestError, IngestReport, ingest_pi_csv};

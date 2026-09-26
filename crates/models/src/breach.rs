@@ -55,7 +55,10 @@ pub struct BreachEvent {
     pub vendor_id: Option<Uuid>,
     pub individuals_affected: Option<i32>,
     pub breach_type: Option<String>,
+    pub breach_location: Option<String>,
+    pub portal_entity_type: Option<String>,
     pub date_reported: Option<NaiveDate>,
+    pub state: Option<String>,
     pub source: String,
     pub source_url: Option<String>,
 }

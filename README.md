@@ -32,6 +32,7 @@ cargo run -p vulnrx-etl -- hospitals
 cargo run -p vulnrx-etl -- pi
 cargo run -p vulnrx-etl -- pi-2024
 cargo run -p vulnrx-etl -- expand-cehrt
+cargo run -p vulnrx-etl -- breaches
 ```
 
-`hospitals` loads every Medicare-registered hospital and does not invent vendor links. `pi` loads the 2023 ONC file that already joins each hospital to CHPL products. `pi-2024` stores the newer bundle id CMS published for each hospital. `expand-cehrt` asks CHPL which products are inside those ids; it requires `CHPL_API_KEY` from `.env.example`. `--state` limits `hospitals`, `pi`, and `pi-2024` to one USPS code.
+`hospitals` loads every Medicare-registered hospital and does not invent vendor links. `pi` loads the 2023 ONC file that already joins each hospital to CHPL products. `pi-2024` stores the newer bundle id CMS published for each hospital. `expand-cehrt` asks CHPL which products are inside those ids; it requires `CHPL_API_KEY` from `.env.example`. `breaches` reads the HHS OCR breach portal. A healthcare provider is linked to a hospital only when the normalized name and state match exactly one facility. `--state` limits `hospitals`, `pi`, `pi-2024`, and `breaches` to one USPS code.
