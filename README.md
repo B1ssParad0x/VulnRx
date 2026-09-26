@@ -4,23 +4,21 @@ Hospital vendor and vulnerability risk intelligence. Search a U.S. hospital and 
 
 ## Guardrails
 
-- Show evidence of exploitability (CVSS, EPSS, KEV status, confirmed exposure). Do not generate exploit code or proof-of-concept steps.
-- Do not scan or probe hospital networks. Exposure data, when present, comes from querying an existing public index.
-- Every stored relationship or event names its public source. Do not insert a vendor link, breach, or filing that has no citable source.
+- Shows evidence of exploitability (CVSS, EPSS, KEV status, confirmed exposure). Does not generate exploit code or proof-of-concept steps.
+- Does not scan or probe hospital networks. Exposure data, when present, comes from querying an existing public index.
+- Every stored relationship or event names its public source.
 
 ## Database
 
-Postgres 16 with TimescaleDB. [`docker/db/Dockerfile`](docker/db/Dockerfile) copies [`migrations/0001_init.sql`](migrations/0001_init.sql) into the image so the first boot applies it after Timescale's own setup.
+Postgres 16 with TimescaleDB. The image only starts the server. Schema lives in [`migrations/`](migrations) and is applied by the `vulnrx-models` crate, so the same files run in Docker and anywhere else.
 
 ```bash
-docker compose up -d --build
+docker compose up -d
+cargo run -p vulnrx-models --bin migrate
 ```
 
-Copy `.env.example` to `.env` if a tool expects `DATABASE_URL`. The local password is a development default, not a credential.
-
-Init scripts do not re-run inside an existing volume. After a schema change, reset and rebuild:
+`migrate` uses `DATABASE_URL` when it is set, and otherwise connects to the local Compose database. Copy `.env.example` to `.env` if you want that variable defined. The local password is a development default, not a credential.
 
 ```bash
-docker compose down -v
-docker compose up -d --build
+cargo test -p vulnrx-models
 ```

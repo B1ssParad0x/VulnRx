@@ -1,0 +1,34 @@
+[workspace]
+resolver = "3"
+members = ["crates/models"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+authors = ["B1issParad0x"]
+
+[workspace.dependencies]
+chrono = { version = "0.4.45", features = ["serde"] }
+rust_decimal = { version = "1.43.0", features = ["serde"] }
+serde = { version = "1.0.229", features = ["derive"] }
+sqlx = { version = "0.9.0", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls-ring-native-roots",
+    "postgres",
+    "uuid",
+    "chrono",
+    "rust_decimal",
+    "migrate",
+    "macros",
+] }
+thiserror = "2.0.21"
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }
+uuid = { version = "1.26.1", features = ["serde", "v4"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
