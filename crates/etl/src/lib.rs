@@ -2,6 +2,7 @@
 
 mod breaches;
 mod chpl;
+mod edgar;
 mod hospitals;
 mod kev;
 mod load;
@@ -11,6 +12,7 @@ pub use breaches::{
     BREACH_PORTAL_URL, BreachRecord, BreachReport, fetch_breach_portal, ingest_breaches,
 };
 pub use chpl::{BundleProduct, CehrtBundle, ExpandReport, expand_cehrt, link_cehrt_bundles};
+pub use edgar::{EdgarFiling, EdgarReport, fetch_item_105_filings, ingest_filings};
 pub use hospitals::{HOSPITAL_REGISTRY_URL, HospitalLoadReport, ingest_hospital_registry};
 pub use kev::{
     KEV_CATALOG_URL, KevEntry, KevReport, NvdFacts, fetch_epss, fetch_nvd_kev, ingest_kev,
