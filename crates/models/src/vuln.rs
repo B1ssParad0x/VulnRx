@@ -18,6 +18,8 @@ pub struct Cve {
     /// `false` means checked and absent. `true` means listed.
     pub is_kev: Option<bool>,
     pub published_date: Option<NaiveDate>,
+    pub kev_vendor: Option<String>,
+    pub kev_product: Option<String>,
 }
 
 /// Link between a product and a CVE, with the CPE that justified the match.
@@ -26,4 +28,6 @@ pub struct ProductCveMap {
     pub product_id: Uuid,
     pub cve_id: Uuid,
     pub matched_cpe: Option<String>,
+    /// Why the link exists. `cisa_kev` means the CISA catalog named this vendor and product.
+    pub match_basis: Option<String>,
 }

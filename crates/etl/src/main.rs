@@ -100,6 +100,19 @@ async fn run() -> Result<ExitCode, vulnrx_etl::IngestError> {
             );
             Ok(ExitCode::SUCCESS)
         }
+        Command::Kev => {
+            let catalog = vulnrx_etl::download_csv(vulnrx_etl::KEV_CATALOG_URL).await?;
+            let entries = vulnrx_etl::parse_kev_catalog(&catalog)?;
+            let ids: Vec<String> = entries.iter().map(|entry| entry.cve_id.clone()).collect();
+            let epss = vulnrx_etl::fetch_epss(&ids).await?;
+            let nvd = vulnrx_etl::fetch_nvd_kev().await?;
+            let report = vulnrx_etl::ingest_kev(&pool, &entries, &epss, &nvd).await?;
+            println!(
+                "cisa kev: upserted {} cves ({} with epss, {} with cvss), linked {} products",
+                report.cves, report.with_epss, report.with_cvss, report.product_links
+            );
+            Ok(ExitCode::SUCCESS)
+        }
     }
 }
 
@@ -121,6 +134,7 @@ enum Command {
     Breaches {
         state: Option<String>,
     },
+    Kev,
 }
 
 fn parse_args() -> Result<Command, String> {
@@ -144,6 +158,10 @@ fn parse_args() -> Result<Command, String> {
         Some("breaches") => {
             raw.remove(0);
             "breaches"
+        }
+        Some("kev") => {
+            raw.remove(0);
+            "kev"
         }
         Some("pi") => {
             raw.remove(0);
@@ -178,6 +196,12 @@ fn parse_args() -> Result<Command, String> {
             }
             Command::Breaches { state }
         }
+        "kev" => {
+            if state.is_some() || url.is_some() {
+                return Err(usage());
+            }
+            Command::Kev
+        }
         _ => Command::Pi { state, url },
     })
 }
@@ -189,12 +213,14 @@ fn usage() -> String {
      vulnrx-etl pi-2024 [--state XX] [--url CSV_URL]\n\
      vulnrx-etl expand-cehrt\n\
      vulnrx-etl breaches [--state XX]\n\
+     vulnrx-etl kev\n\
      \n\
      pi loads the 2023 ONC file that already joins hospitals to CHPL products.\n\
      hospitals loads every Medicare-registered hospital. It does not invent vendor links.\n\
      pi-2024 stores the 2024 certified-product bundle id reported by each hospital.\n\
      expand-cehrt asks CHPL which products are inside those bundle ids. It requires CHPL_API_KEY.\n\
      breaches reads the HHS OCR breach portal and links a row to a hospital only when the name and state match one facility.\n\
+     kev loads the CISA known-exploited catalog, FIRST.org EPSS, and NVD CVSS. A product is linked only when the catalog's vendor and product names match one stored product.\n\
      With no command, pi is used."
         .to_string()
 }

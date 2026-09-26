@@ -3,6 +3,7 @@
 mod breaches;
 mod chpl;
 mod hospitals;
+mod kev;
 mod load;
 mod pi2024;
 
@@ -11,6 +12,10 @@ pub use breaches::{
 };
 pub use chpl::{BundleProduct, CehrtBundle, ExpandReport, expand_cehrt, link_cehrt_bundles};
 pub use hospitals::{HOSPITAL_REGISTRY_URL, HospitalLoadReport, ingest_hospital_registry};
+pub use kev::{
+    KEV_CATALOG_URL, KevEntry, KevReport, NvdFacts, fetch_epss, fetch_nvd_kev, ingest_kev,
+    parse_kev_catalog,
+};
 pub use load::{IngestError, IngestReport, ingest_pi_csv};
 pub use pi2024::{PI_2024_URL, Pi2024Report, ingest_pi_2024};
 
