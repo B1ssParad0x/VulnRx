@@ -39,3 +39,19 @@ cargo run -p vulnrx-etl -- score
 ```
 
 `hospitals` loads every Medicare-registered hospital and does not invent vendor links. `pi` loads the 2023 ONC file that already joins each hospital to CHPL products. `pi-2024` stores the newer bundle id CMS published for each hospital. `expand-cehrt` asks CHPL which products are inside those ids; it requires `CHPL_API_KEY` from `.env.example`. `breaches` reads the HHS OCR breach portal. A healthcare provider is linked to a hospital only when the normalized name and state match exactly one facility. `kev` loads CISA's known-exploited catalog with EPSS and CVSS, and links a CVE to a product only when the catalog names that vendor and product. `edgar` loads 8-K Item 1.05 incident reports from December 2023 through today, and 10-K Item 1C cybersecurity disclosures filed since 2024 by hospital operators, nursing facilities, health plans, and medical-device companies. Each summary is an excerpt of the filing. `score` writes a hospital rollup only for facilities with a linked breach, Item 1.05 filing, product CVE, or exposure. A component with no linked input is stored as 0 and left out of the average; `method` names the inputs that were used. `--state` limits `hospitals`, `pi`, `pi-2024`, and `breaches` to one USPS code.
+
+## API
+
+[`vulnrx-api`](crates/api) reads the store. It does not invent rows for hospitals that have no linked record.
+
+```bash
+cargo run -p vulnrx-api
+```
+
+`BIND_ADDR` defaults to `127.0.0.1:8080`.
+
+- `GET /api/hospitals/search?q=` matches name, display name, alias, or CCN
+- `GET /api/hospitals/{id}` returns the facility, vendor links, CEHRT ids, breaches, filings, exposures, and the latest rollup
+- `GET /api/hospitals/{id}/vulnerabilities` returns CVEs linked to that hospital's products. `product_count` is the stack size when the CVE list is empty
+- `GET /api/vendors/{id}` returns the vendor, its products, and every hospital a public source links to it
+- `GET /api/incidents/recent` returns linked OCR breaches and Item 1.05 filings, newest first

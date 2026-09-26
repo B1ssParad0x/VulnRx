@@ -1,0 +1,26 @@
+[package]
+name = "vulnrx-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = "0.8"
+chrono.workspace = true
+rust_decimal.workspace = true
+serde.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net"] }
+uuid.workspace = true
+vulnrx-models = { path = "../models" }
+
+[dev-dependencies]
+http-body-util = "0.1"
+serde_json = "1"
+tower = { version = "0.5", features = ["util"] }
