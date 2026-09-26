@@ -122,6 +122,14 @@ async fn run() -> Result<ExitCode, vulnrx_etl::IngestError> {
             );
             Ok(ExitCode::SUCCESS)
         }
+        Command::Score => {
+            let report = vulnrx_etl::score_hospitals(&pool).await?;
+            println!(
+                "risk scores: wrote {} hospital rollups ({} from incidents only, {} include a linked CVE, {} include an exposure)",
+                report.hospitals, report.breach_only, report.with_cve, report.with_exposure
+            );
+            Ok(ExitCode::SUCCESS)
+        }
     }
 }
 
@@ -145,6 +153,7 @@ enum Command {
     },
     Kev,
     Edgar,
+    Score,
 }
 
 fn parse_args() -> Result<Command, String> {
@@ -176,6 +185,10 @@ fn parse_args() -> Result<Command, String> {
         Some("edgar") => {
             raw.remove(0);
             "edgar"
+        }
+        Some("score") => {
+            raw.remove(0);
+            "score"
         }
         Some("pi") => {
             raw.remove(0);
@@ -222,6 +235,12 @@ fn parse_args() -> Result<Command, String> {
             }
             Command::Edgar
         }
+        "score" => {
+            if state.is_some() || url.is_some() {
+                return Err(usage());
+            }
+            Command::Score
+        }
         _ => Command::Pi { state, url },
     })
 }
@@ -235,6 +254,7 @@ fn usage() -> String {
      vulnrx-etl breaches [--state XX]\n\
      vulnrx-etl kev\n\
      vulnrx-etl edgar\n\
+     vulnrx-etl score\n\
      \n\
      pi loads the 2023 ONC file that already joins hospitals to CHPL products.\n\
      hospitals loads every Medicare-registered hospital. It does not invent vendor links.\n\
@@ -243,6 +263,7 @@ fn usage() -> String {
      breaches reads the HHS OCR breach portal and links a row to a hospital only when the name and state match one facility.\n\
      kev loads the CISA known-exploited catalog, FIRST.org EPSS, and NVD CVSS. A product is linked only when the catalog's vendor and product names match one stored product.\n\
      edgar loads 8-K Item 1.05 incident reports since December 2023 and 10-K Item 1C cybersecurity disclosures filed from 2024 onward for hospital, nursing, health-plan, and medical-device industries. The summary is an excerpt of the filing. SEC requires a contact in the user agent; set SEC_USER_AGENT if the default is rejected.\n\
+     score writes a hospital rollup only where a linked breach, Item 1.05 filing, product CVE, or exposure exists. Components with no linked input are stored as 0 and left out of the average. method names the inputs that were used.\n\
      With no command, pi is used."
         .to_string()
 }

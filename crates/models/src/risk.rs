@@ -7,7 +7,8 @@ use uuid::Uuid;
 /// One computed risk score.
 ///
 /// `vendor_id` is empty for the hospital-level rollup. `method` names the formula
-/// so a later change does not look like a change in risk.
+/// and which inputs were present (`v1:breach`, `v1:cve`, `v1:breach+cve+exposure`).
+/// A component stored as 0 was not an input. It is not a claim that the risk is zero.
 #[derive(Debug, Clone, PartialEq, Eq, FromRow, Serialize, Deserialize)]
 pub struct RiskScore {
     pub id: Uuid,

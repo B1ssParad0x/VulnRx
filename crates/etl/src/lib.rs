@@ -7,6 +7,7 @@ mod hospitals;
 mod kev;
 mod load;
 mod pi2024;
+mod score;
 
 pub use breaches::{
     BREACH_PORTAL_URL, BreachRecord, BreachReport, fetch_breach_portal, ingest_breaches,
@@ -20,6 +21,7 @@ pub use kev::{
 };
 pub use load::{IngestError, IngestReport, ingest_pi_csv};
 pub use pi2024::{PI_2024_URL, Pi2024Report, ingest_pi_2024};
+pub use score::{ScoreReport, score_hospitals};
 
 /// Public CSV published by ONC. Each row is a hospital-reported CEHRT id joined to a CHPL product.
 pub const PI_CHPL_CSV_URL: &str = "https://healthit.gov/data/wp-content/uploads/sites/2/2025/06/hospital-promoting-interoperability-2023-chpl-linkage.csv";
