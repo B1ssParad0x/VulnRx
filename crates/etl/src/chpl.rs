@@ -177,13 +177,18 @@ async fn fetch_bundle(
         });
     }
     let bytes = response.bytes().await?;
-    let body: LookupResponse = serde_json::from_slice(&bytes)?;
+    bundle_from_body(cehrt_id, &bytes)
+}
+
+fn bundle_from_body(cehrt_id: &str, bytes: &[u8]) -> Result<CehrtBundle, IngestError> {
+    let body: LookupResponse = serde_json::from_slice(bytes)?;
     let products = body
         .products
         .into_iter()
         .filter_map(|product| {
             let developer_name = product
-                .developer_name
+                .vendor
+                .or(product.developer_name)
                 .unwrap_or_default()
                 .trim()
                 .to_string();
@@ -221,7 +226,22 @@ struct ApiProduct {
     id: serde_json::Value,
     #[serde(rename = "developerName")]
     developer_name: Option<String>,
+    vendor: Option<String>,
     name: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bundle_from_body;
+
+    #[test]
+    fn reads_the_vendor_field_chpl_returns() {
+        let body = br#"{"products":[{"id":11453,"name":"EpicCare Inpatient Base","vendor":"Epic Systems Corporation"}]}"#;
+        let bundle = bundle_from_body("0015CFH8CSZ4V7K", body).unwrap();
+        assert_eq!(bundle.products.len(), 1);
+        assert_eq!(bundle.products[0].developer_name, "Epic Systems Corporation");
+        assert_eq!(bundle.products[0].database_id, "11453");
+    }
 }
 
 const CREATE_STAGE: &str = r#"
