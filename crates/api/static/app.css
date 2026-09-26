@@ -309,6 +309,21 @@ input[type="search"]:focus { border-bottom-color: var(--green); }
 .when { color: var(--orange); margin: 0; }
 .kind { margin: 0; color: var(--green); letter-spacing: 0.08em; text-transform: uppercase; }
 .row-title { margin: 0.15rem 0; }
+.explain {
+  margin-top: 0.7rem;
+  background: transparent;
+  color: var(--orange);
+  border: 1px solid var(--orange-dim);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.55rem;
+  cursor: pointer;
+}
+
+.explain:disabled { opacity: 0.5; }
+
 .kev {
   margin-left: 0.4rem;
   color: var(--bg);

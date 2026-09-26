@@ -175,6 +175,20 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
     assert!(vendor_page.body.contains("SOUTHEAST HEALTH MEDICAL CENTER"));
     let missing_page = call_text(&pool, &format!("/hospitals/{}", Uuid::nil())).await;
     assert_eq!(missing_page.status, StatusCode::NOT_FOUND);
+
+    sqlx::query(
+        "INSERT INTO cve_explanations (cve_id, model, explanation)
+         SELECT id, 'gemini-3.5-flash-lite', 'Stored guidance for the test.'
+         FROM cves WHERE cve_id = 'CVE-2024-12345'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let explained = call_method(&pool, "POST", "/cves/CVE-2024-12345/explain").await;
+    assert_eq!(explained.status, StatusCode::OK);
+    assert!(explained.body.contains("Stored guidance for the test."));
+    let missing_cve = call_method(&pool, "POST", "/cves/CVE-1999-0001/explain").await;
+    assert_eq!(missing_cve.status, StatusCode::NOT_FOUND);
     assert!(missing_page.body.contains("Hospital not found"));
 
     drop(pool);
@@ -194,10 +208,11 @@ struct TextCall {
     body: String,
 }
 
-async fn call_text(pool: &sqlx::PgPool, uri: &str) -> TextCall {
+async fn call_method(pool: &sqlx::PgPool, method: &str, uri: &str) -> TextCall {
     let response = vulnrx_api::router(pool.clone())
         .oneshot(
             Request::builder()
+                .method(method)
                 .uri(uri)
                 .body(Body::empty())
                 .unwrap(),
@@ -208,6 +223,10 @@ async fn call_text(pool: &sqlx::PgPool, uri: &str) -> TextCall {
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     TextCall { status, body }
+}
+
+async fn call_text(pool: &sqlx::PgPool, uri: &str) -> TextCall {
+    call_method(pool, "GET", uri).await
 }
 
 async fn call(pool: &sqlx::PgPool, uri: &str) -> Call {

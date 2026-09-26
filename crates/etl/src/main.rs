@@ -4,6 +4,46 @@ use sqlx::postgres::PgPoolOptions;
 
 const LOCAL_DATABASE_URL: &str = "postgres://vulnrx:vulnrx@localhost:5432/vulnrx";
 
+fn load_env_file() {
+    for path in [".env", "../.env", "../../.env"] {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let _ = dotenvy::from_read(normalize_env(&text).as_bytes());
+        return;
+    }
+}
+
+/// dotenv stops at an unquoted space. Values such as the SEC user agent are quoted here.
+fn normalize_env(text: &str) -> String {
+    let mut out = String::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            out.push_str(line);
+            out.push('\n');
+            continue;
+        }
+        let Some((key, value)) = trimmed.split_once('=') else {
+            out.push_str(line);
+            out.push('\n');
+            continue;
+        };
+        let value = value.trim();
+        if value.contains(' ') && !value.starts_with('"') {
+            out.push_str(key.trim());
+            out.push_str("=\"");
+            out.push_str(value);
+            out.push('"');
+            out.push('\n');
+        } else {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out
+}
+
 #[tokio::main]
 async fn main() -> ExitCode {
     match run().await {
@@ -16,6 +56,7 @@ async fn main() -> ExitCode {
 }
 
 async fn run() -> Result<ExitCode, vulnrx_etl::IngestError> {
+    load_env_file();
     let command = match parse_args() {
         Ok(command) => command,
         Err(usage) => {
@@ -130,6 +171,33 @@ async fn run() -> Result<ExitCode, vulnrx_etl::IngestError> {
             );
             Ok(ExitCode::SUCCESS)
         }
+        Command::Shodan { limit } => {
+            let report = vulnrx_etl::query_shodan(&pool, limit).await?;
+            println!(
+                "shodan: {} index queries, {} products with a confirming hit{}",
+                report.queries,
+                report.stored,
+                stopped_suffix(report.stopped.as_deref())
+            );
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Censys { limit } => {
+            let report = vulnrx_etl::query_censys(&pool, limit).await?;
+            println!(
+                "censys: {} index queries, {} products with a confirming hit{}",
+                report.queries,
+                report.stored,
+                stopped_suffix(report.stopped.as_deref())
+            );
+            Ok(ExitCode::SUCCESS)
+        }
+    }
+}
+
+fn stopped_suffix(stopped: Option<&str>) -> String {
+    match stopped {
+        Some(reason) => format!("; stopped: {reason}"),
+        None => String::new(),
     }
 }
 
@@ -154,6 +222,8 @@ enum Command {
     Kev,
     Edgar,
     Score,
+    Shodan { limit: Option<i64> },
+    Censys { limit: Option<i64> },
 }
 
 fn parse_args() -> Result<Command, String> {
@@ -190,6 +260,14 @@ fn parse_args() -> Result<Command, String> {
             raw.remove(0);
             "score"
         }
+        Some("shodan") => {
+            raw.remove(0);
+            "shodan"
+        }
+        Some("censys") => {
+            raw.remove(0);
+            "censys"
+        }
         Some("pi") => {
             raw.remove(0);
             "pi"
@@ -200,48 +278,84 @@ fn parse_args() -> Result<Command, String> {
     };
     let mut state = None;
     let mut url = None;
+    let mut limit = None;
     let mut rest = raw.into_iter();
     while let Some(arg) = rest.next() {
         match arg.as_str() {
             "--state" => state = Some(rest.next().ok_or_else(usage)?),
             "--url" => url = Some(rest.next().ok_or_else(usage)?),
+            "--limit" => {
+                let raw_limit = rest.next().ok_or_else(usage)?;
+                limit = Some(
+                    raw_limit
+                        .parse::<i64>()
+                        .map_err(|_| "limit must be an integer".to_string())?,
+                );
+            }
             _ => return Err(usage()),
         }
     }
     Ok(match kind {
-        "hospitals" => Command::Hospitals { state, url },
-        "pi-2024" => Command::Pi2024 { state, url },
+        "hospitals" => {
+            if limit.is_some() {
+                return Err(usage());
+            }
+            Command::Hospitals { state, url }
+        }
+        "pi-2024" => {
+            if limit.is_some() {
+                return Err(usage());
+            }
+            Command::Pi2024 { state, url }
+        }
         "expand-cehrt" => {
-            if state.is_some() || url.is_some() {
+            if state.is_some() || url.is_some() || limit.is_some() {
                 return Err(usage());
             }
             Command::ExpandCehrt
         }
         "breaches" => {
-            if url.is_some() {
+            if url.is_some() || limit.is_some() {
                 return Err(usage());
             }
             Command::Breaches { state }
         }
         "kev" => {
-            if state.is_some() || url.is_some() {
+            if state.is_some() || url.is_some() || limit.is_some() {
                 return Err(usage());
             }
             Command::Kev
         }
         "edgar" => {
-            if state.is_some() || url.is_some() {
+            if state.is_some() || url.is_some() || limit.is_some() {
                 return Err(usage());
             }
             Command::Edgar
         }
         "score" => {
-            if state.is_some() || url.is_some() {
+            if state.is_some() || url.is_some() || limit.is_some() {
                 return Err(usage());
             }
             Command::Score
         }
-        _ => Command::Pi { state, url },
+        "shodan" => {
+            if state.is_some() || url.is_some() {
+                return Err(usage());
+            }
+            Command::Shodan { limit }
+        }
+        "censys" => {
+            if state.is_some() || url.is_some() {
+                return Err(usage());
+            }
+            Command::Censys { limit }
+        }
+        _ => {
+            if limit.is_some() {
+                return Err(usage());
+            }
+            Command::Pi { state, url }
+        }
     })
 }
 
@@ -255,6 +369,8 @@ fn usage() -> String {
      vulnrx-etl kev\n\
      vulnrx-etl edgar\n\
      vulnrx-etl score\n\
+     vulnrx-etl shodan [--limit N]\n\
+     vulnrx-etl censys [--limit N]\n\
      \n\
      pi loads the 2023 ONC file that already joins hospitals to CHPL products.\n\
      hospitals loads every Medicare-registered hospital. It does not invent vendor links.\n\
@@ -264,6 +380,7 @@ fn usage() -> String {
      kev loads the CISA known-exploited catalog, FIRST.org EPSS, and NVD CVSS. A product is linked only when the catalog's vendor and product names match one stored product.\n\
      edgar loads 8-K Item 1.05 incident reports since December 2023 and 10-K Item 1C cybersecurity disclosures filed from 2024 onward for hospital, nursing, health-plan, and medical-device industries. The summary is an excerpt of the filing. SEC requires a contact in the user agent; set SEC_USER_AGENT if the default is rejected.\n\
      score writes a hospital rollup only where a linked breach, Item 1.05 filing, product CVE, or exposure exists. Components with no linked input are stored as 0 and left out of the average. method names the inputs that were used.\n\
+     shodan and censys query an existing public index for stored product names. Default limit is 20 queries, and the maximum is 50. A hit is stored only when the result names that product. Host addresses are not stored.\n\
      With no command, pi is used."
         .to_string()
 }

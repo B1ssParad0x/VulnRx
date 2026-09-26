@@ -32,6 +32,8 @@ pub enum IngestError {
     Json(#[from] serde_json::Error),
     #[error("CHPL_API_KEY is not set, so CEHRT bundles cannot be expanded into products")]
     MissingApiKey,
+    #[error("{0} is not set")]
+    MissingKey(&'static str),
     #[error("breach portal: {0}")]
     Portal(String),
     #[error(transparent)]

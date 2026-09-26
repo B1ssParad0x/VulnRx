@@ -4,6 +4,7 @@
 //! which is different from a stored zero.
 
 mod error;
+mod explain;
 mod hospitals;
 mod incidents;
 mod pages;
@@ -11,7 +12,7 @@ mod vendors;
 
 use std::net::SocketAddr;
 
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Serialize;
 use sqlx::PgPool;
@@ -38,6 +39,8 @@ pub fn router(pool: PgPool) -> Router {
         )
         .route("/api/vendors/{id}", get(vendors::profile))
         .route("/api/incidents/recent", get(incidents::recent))
+        .route("/api/cves/{id}/explain", post(explain::json))
+        .route("/cves/{id}/explain", post(explain::fragment))
         .fallback(unknown_route)
         .with_state(pool)
 }

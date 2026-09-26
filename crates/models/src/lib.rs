@@ -21,6 +21,8 @@ pub use vuln::{Cve, ProductCveMap};
 
 /// Applies embedded SQL migrations. Safe to call on every startup.
 /// New files under `migrations/` are picked up the next time this crate builds.
+/// `0007_cve_explanations.sql` stores one Gemini reply per CVE.
+/// `0008_gemini_model.sql` names the Flash-Lite model new projects can call.
 pub async fn migrate(pool: &sqlx::PgPool) -> Result<(), sqlx::migrate::MigrateError> {
     sqlx::migrate!("../../migrations").run(pool).await
 }

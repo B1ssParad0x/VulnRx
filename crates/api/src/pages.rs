@@ -142,6 +142,7 @@ struct CveRow {
     product: String,
     scores: String,
     description: String,
+    explanation: String,
 }
 
 struct ExposureRow {
@@ -307,17 +308,30 @@ pub(crate) async fn hospital(
                 .collect(),
             timeline: timeline(&profile),
             cve_note: cve_note(vulns.product_count, vulns.vulnerabilities.len()),
-            cves: vulns
-                .vulnerabilities
-                .iter()
-                .map(|cve| CveRow {
-                    cve_id: cve.cve_id.clone(),
-                    kev: cve.is_kev == Some(true),
-                    product: format!("{} · {}", cve.vendor_name, cve.product_name),
-                    scores: cve_scores(cve),
-                    description: cve.description.clone().unwrap_or_default(),
-                })
-                .collect(),
+            cves: {
+                let ids: Vec<String> = vulns
+                    .vulnerabilities
+                    .iter()
+                    .map(|cve| cve.cve_id.clone())
+                    .collect();
+                let saved = crate::explain::cached_for(&pool, &ids).await?;
+                vulns
+                    .vulnerabilities
+                    .iter()
+                    .map(|cve| CveRow {
+                        explanation: saved
+                            .iter()
+                            .find(|(id, _)| id == &cve.cve_id)
+                            .map(|(_, text)| text.clone())
+                            .unwrap_or_default(),
+                        cve_id: cve.cve_id.clone(),
+                        kev: cve.is_kev == Some(true),
+                        product: format!("{} · {}", cve.vendor_name, cve.product_name),
+                        scores: cve_scores(cve),
+                        description: cve.description.clone().unwrap_or_default(),
+                    })
+                    .collect()
+            },
             exposures: profile
                 .exposures
                 .iter()

@@ -61,6 +61,7 @@ pub async fn expand_cehrt(pool: &PgPool) -> Result<ExpandReport, IngestError> {
         if (n + 1) % 50 == 0 {
             eprintln!("looked up {} of {} CEHRT ids", n + 1, ids.len());
         }
+        tokio::time::sleep(std::time::Duration::from_millis(80)).await;
     }
     let mut report = link_cehrt_bundles(pool, &bundles).await?;
     report.failed_lookups = failed_lookups;
@@ -141,13 +142,33 @@ pub async fn link_cehrt_bundles(
     })
 }
 
+async fn fetch_with_backoff(
+    client: &reqwest::Client,
+    url: &str,
+    api_key: &str,
+) -> Result<reqwest::Response, IngestError> {
+    let mut pause = std::time::Duration::from_secs(2);
+    for _ in 0..5 {
+        let response = client.get(url).header("API-Key", api_key).send().await?;
+        if response.status() != reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Ok(response);
+        }
+        tokio::time::sleep(pause).await;
+        pause *= 2;
+    }
+    Err(IngestError::HttpStatus {
+        url: url.to_string(),
+        status: 429,
+    })
+}
+
 async fn fetch_bundle(
     client: &reqwest::Client,
     api_key: &str,
     cehrt_id: &str,
 ) -> Result<CehrtBundle, IngestError> {
     let url = format!("https://chpl.healthit.gov/rest/certification_ids/{cehrt_id}");
-    let response = client.get(&url).header("API-Key", api_key).send().await?;
+    let response = fetch_with_backoff(client, &url, api_key).await?;
     let status = response.status();
     if !status.is_success() {
         return Err(IngestError::HttpStatus {

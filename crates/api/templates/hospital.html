@@ -95,6 +95,13 @@
           <p class="meta">{{ cve.product }}</p>
           {% if cve.scores != "" %}<p class="meta">{{ cve.scores }}</p>{% endif %}
           {% if cve.description != "" %}<p>{{ cve.description }}</p>{% endif %}
+          {% if cve.explanation != "" %}
+          <p class="note">Saved guidance. Not an assessment.</p>
+          <p>{{ cve.explanation }}</p>
+          {% else %}
+          <button class="explain" type="button" hx-post="/cves/{{ cve.cve_id }}/explain" hx-target="#explain-{{ cve.cve_id }}" hx-swap="innerHTML" hx-disabled-elt="this">Explain</button>
+          <div id="explain-{{ cve.cve_id }}"></div>
+          {% endif %}
         </li>
         {% endfor %}
       </ul>

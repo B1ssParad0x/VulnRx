@@ -10,6 +10,8 @@ pub(crate) enum ApiError {
     NotFound(&'static str),
     #[error("{0}")]
     BadRequest(&'static str),
+    #[error("{0}")]
+    Unavailable(&'static str),
     #[error("database error: {0}")]
     Database(#[from] sqlx::Error),
 }
@@ -19,6 +21,7 @@ impl IntoResponse for ApiError {
         let (status, error) = match self {
             Self::NotFound(message) => (StatusCode::NOT_FOUND, message),
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
+            Self::Unavailable(message) => (StatusCode::SERVICE_UNAVAILABLE, message),
             Self::Database(err) => {
                 eprintln!("database error: {err}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "database error")
