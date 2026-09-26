@@ -28,15 +28,15 @@ pub(crate) struct IncidentResponse {
 
 #[derive(Serialize)]
 pub(crate) struct Incident {
-    hospital_id: Uuid,
-    hospital_name: String,
-    state: Option<String>,
-    kind: String,
-    occurred_on: Option<NaiveDate>,
-    detail: Option<String>,
-    individuals_affected: Option<i32>,
-    source: String,
-    source_url: Option<String>,
+    pub(crate) hospital_id: Uuid,
+    pub(crate) hospital_name: String,
+    pub(crate) state: Option<String>,
+    pub(crate) kind: String,
+    pub(crate) occurred_on: Option<NaiveDate>,
+    pub(crate) detail: Option<String>,
+    pub(crate) individuals_affected: Option<i32>,
+    pub(crate) source: String,
+    pub(crate) source_url: Option<String>,
 }
 
 #[derive(FromRow)]
@@ -58,11 +58,16 @@ pub(crate) async fn recent(
     Query(query): Query<RecentQuery>,
 ) -> Result<Json<IncidentResponse>, ApiError> {
     let limit = error::parse_limit(query.limit.as_deref(), DEFAULT_LIMIT, MAX_LIMIT)?;
+    let incidents = load_incidents(&pool, limit).await?;
+    Ok(Json(IncidentResponse { incidents }))
+}
+
+pub(crate) async fn load_incidents(pool: &PgPool, limit: i64) -> Result<Vec<Incident>, ApiError> {
     let rows = sqlx::query_as::<_, IncidentRow>(RECENT_SQL)
         .bind(limit)
-        .fetch_all(&pool)
+        .fetch_all(pool)
         .await?;
-    let incidents = rows
+    Ok(rows
         .into_iter()
         .map(|row| Incident {
             hospital_name: public_name(&row.name, row.display_name.as_deref()).to_string(),
@@ -75,8 +80,7 @@ pub(crate) async fn recent(
             source: row.source,
             source_url: row.source_url,
         })
-        .collect();
-    Ok(Json(IncidentResponse { incidents }))
+        .collect())
 }
 
 const RECENT_SQL: &str = "

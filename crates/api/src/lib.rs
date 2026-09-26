@@ -6,6 +6,7 @@
 mod error;
 mod hospitals;
 mod incidents;
+mod pages;
 mod vendors;
 
 use std::net::SocketAddr;
@@ -20,6 +21,13 @@ use crate::error::ApiError;
 /// Routes for hospital search, profiles, vendor rollups, and the incident ticker.
 pub fn router(pool: PgPool) -> Router {
     Router::new()
+        .route("/", get(pages::home))
+        .route("/search", get(pages::search_results))
+        .route("/hospitals/{id}", get(pages::hospital))
+        .route("/vendors/{id}", get(pages::vendor))
+        .route("/static/app.css", get(pages::css))
+        .route("/static/htmx.min.js", get(pages::script))
+        .route("/favicon.ico", get(pages::favicon))
         .route("/api/health", get(health))
         .route("/api/hospitals/search", get(hospitals::search))
         .route("/api/hospitals/{id}", get(hospitals::profile))

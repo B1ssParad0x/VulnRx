@@ -10,6 +10,7 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
+askama = "0.14"
 axum = "0.8"
 chrono.workspace = true
 rust_decimal.workspace = true

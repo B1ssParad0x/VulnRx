@@ -137,6 +137,38 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
     let unknown = call(&pool, "/api/missing").await;
     assert_eq!(unknown.status, StatusCode::NOT_FOUND);
 
+    let home = call_text(&pool, "/").await;
+    assert_eq!(home.status, StatusCode::OK);
+    assert!(home.body.contains("VULNRX"));
+    assert!(home.body.contains("Mercy Downtown"));
+    assert!(home.body.contains("SOUTHEAST HEALTH MEDICAL CENTER"));
+    assert!(!home.body.contains("Unlinked Clinic"));
+    assert!(!home.body.contains("10-K Item 1C"));
+
+    let typed = call_text(&pool, "/?q=south").await;
+    assert!(typed.body.contains("SOUTHEAST HEALTH MEDICAL CENTER"));
+    let fragment = call_text(&pool, "/search?q=south").await;
+    assert!(fragment.body.contains("SOUTHEAST HEALTH MEDICAL CENTER"));
+    assert!(!fragment.body.contains("VULNRX"));
+    let short_html = call_text(&pool, "/search?q=s").await;
+    assert!(short_html.body.contains("two characters"));
+
+    let page = call_text(&pool, &format!("/hospitals/{hospital_id}")).await;
+    assert_eq!(page.status, StatusCode::OK);
+    assert!(page.body.contains("Example EHR"));
+    assert!(page.body.contains("not an input"));
+    assert!(page.body.contains("10-K Item 1C"));
+    assert!(page.body.contains("Hacking/IT Incident"));
+    let county_page = call_text(&pool, &format!("/hospitals/{county_id}")).await;
+    assert!(county_page.body.contains("Mercy Downtown"));
+    assert!(county_page.body.contains("8-K Item 1.05"));
+    let vendor_page = call_text(&pool, &format!("/vendors/{vendor_id}")).await;
+    assert!(vendor_page.body.contains("Example EHR"));
+    assert!(vendor_page.body.contains("SOUTHEAST HEALTH MEDICAL CENTER"));
+    let missing_page = call_text(&pool, &format!("/hospitals/{}", Uuid::nil())).await;
+    assert_eq!(missing_page.status, StatusCode::NOT_FOUND);
+    assert!(missing_page.body.contains("Hospital not found"));
+
     drop(pool);
     sqlx::query(DROP_TEST_DATABASE)
         .execute(&admin_pool)
@@ -147,6 +179,27 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
 struct Call {
     status: StatusCode,
     json: Value,
+}
+
+struct TextCall {
+    status: StatusCode,
+    body: String,
+}
+
+async fn call_text(pool: &sqlx::PgPool, uri: &str) -> TextCall {
+    let response = vulnrx_api::router(pool.clone())
+        .oneshot(
+            Request::builder()
+                .uri(uri)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    TextCall { status, body }
 }
 
 async fn call(pool: &sqlx::PgPool, uri: &str) -> Call {

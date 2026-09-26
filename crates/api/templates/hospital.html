@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  {% include "top.html" %}
+  <main class="profile">
+    <p class="back"><a href="/">Search</a></p>
+    <div class="split">
+      <section class="panel">
+        <p class="kicker">rollup</p>
+        {% if score_present %}
+        <p class="score-num">{{ score_value }}</p>
+        <div class="meter" aria-hidden="true"><span style="width: {{ score_width }}"></span></div>
+        {% else %}
+        <p class="score-num quiet">none</p>
+        {% endif %}
+        <p class="note">{{ score_note }}</p>
+        {% if score_present %}
+        <dl class="components">
+          <div><dt>breach</dt><dd>{{ score_breach }}</dd></div>
+          <div><dt>cve</dt><dd>{{ score_cve }}</dd></div>
+          <div><dt>exposure</dt><dd>{{ score_exposure }}</dd></div>
+        </dl>
+        {% endif %}
+      </section>
+      <section class="panel">
+        <p class="kicker">facility</p>
+        <h1>{{ label }}</h1>
+        {% if place != "" %}<p class="place">{{ place }}</p>{% endif %}
+        <ul class="facts">
+          {% if ccn != "" %}<li>CCN {{ ccn }}</li>{% endif %}
+          {% if public_entity %}<li>Public entity</li>{% endif %}
+          {% if facility_source != "" %}<li>{{ facility_source }}</li>{% endif %}
+        </ul>
+      </section>
+    </div>
+
+    <section class="stack">
+      <h2>Vendors</h2>
+      {% if vendors.is_empty() %}
+      <p class="empty">No public file links a vendor to this hospital.</p>
+      {% else %}
+      <ul class="cards">
+        {% for card in vendors %}
+        <li class="panel card">
+          <a href="{{ card.href }}">{{ card.vendor }}</a>
+          <p>{{ card.product }}</p>
+          <p class="meta">{{ card.meta }}</p>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+
+    <section class="stack">
+      <h2>Incidents and filings</h2>
+      {% if timeline.is_empty() %}
+      <p class="empty">No breach or SEC filing is linked to this hospital.</p>
+      {% else %}
+      <ol class="timeline">
+        {% for row in timeline %}
+        <li>
+          <p class="when">{{ row.when }}</p>
+          <div>
+            <p class="kind">{{ row.kind }}</p>
+            <p class="row-title">{{ row.title }}</p>
+            {% if row.body != "" %}<p>{{ row.body }}</p>{% endif %}
+            <p class="meta">
+              {% if row.source_href != "" %}
+              <a href="{{ row.source_href }}">{{ row.source_label }}</a>
+              {% else %}
+              {{ row.source_label }}
+              {% endif %}
+            </p>
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+      {% endif %}
+    </section>
+
+    <section class="stack">
+      <h2>Vulnerabilities</h2>
+      <p class="note">{{ cve_note }}</p>
+      {% if !cves.is_empty() %}
+      <ul class="cves">
+        {% for cve in cves %}
+        <li class="panel">
+          <p class="row-title">{{ cve.cve_id }}{% if cve.kev %} <em class="kev">KEV</em>{% endif %}</p>
+          <p class="meta">{{ cve.product }}</p>
+          {% if cve.scores != "" %}<p class="meta">{{ cve.scores }}</p>{% endif %}
+          {% if cve.description != "" %}<p>{{ cve.description }}</p>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+
+    <section class="stack">
+      <h2>Exposure</h2>
+      {% if exposures.is_empty() %}
+      <p class="empty">No Shodan or Censys index hit is stored for this hospital.</p>
+      {% else %}
+      <ul class="cards">
+        {% for row in exposures %}
+        <li class="panel card">
+          <p class="row-title">{{ row.service }}</p>
+          <p class="meta">{{ row.meta }}</p>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+
+    <section class="stack">
+      <h2>Certified product ids</h2>
+      {% if cehrt.is_empty() %}
+      <p class="empty">No CEHRT id is stored for this hospital.</p>
+      {% else %}
+      <ul class="facts">
+        {% for row in cehrt %}
+        <li>{{ row.line }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+  </main>
+  <footer><p>A stored zero is not shown as a measured risk. Components that were not inputs say so.</p></footer>
+  <script src="/static/htmx.min.js"></script>
+</body>
+</html>

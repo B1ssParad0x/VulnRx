@@ -1,0 +1,18 @@
+{% if short %}
+<p class="empty">Type at least two characters.</p>
+{% else if searched %}
+  {% if hits.is_empty() %}
+  <p class="empty">No hospital in the registry matches that search.</p>
+  {% else %}
+  <ul class="results">
+    {% for hit in hits %}
+    <li>
+      <a href="/hospitals/{{ hit.id }}">
+        <span class="result-name">{{ hit.label }}</span>
+        {% if hit.meta != "" %}<span class="result-meta">{{ hit.meta }}</span>{% endif %}
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+{% endif %}

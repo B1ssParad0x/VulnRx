@@ -1,0 +1,29 @@
+<header class="bar">
+  <a class="mark" href="/">VULNRX</a>
+  <p class="mark-sub">public hospital risk index</p>
+</header>
+{% if !incidents.is_empty() %}
+<div class="ticker">
+  <p class="ticker-label">incidents</p>
+  <div class="ticker-window">
+    <div class="ticker-track">
+      {% for item in incidents %}
+      <a href="{{ item.href }}">
+        <span>{{ item.when }}</span>
+        {{ item.name }}
+        {% if item.state != "" %}{{ item.state }}{% endif %}
+        {{ item.detail }}
+      </a>
+      {% endfor %}
+      {% for item in incidents %}
+      <a href="{{ item.href }}" aria-hidden="true" tabindex="-1">
+        <span>{{ item.when }}</span>
+        {{ item.name }}
+        {% if item.state != "" %}{{ item.state }}{% endif %}
+        {{ item.detail }}
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}

@@ -29,13 +29,13 @@ pub(crate) struct SearchResponse {
 
 #[derive(Serialize)]
 pub(crate) struct SearchHit {
-    id: Uuid,
-    ccn: Option<String>,
-    name: String,
-    display_name: Option<String>,
-    label: String,
-    city: Option<String>,
-    state: Option<String>,
+    pub(crate) id: Uuid,
+    pub(crate) ccn: Option<String>,
+    pub(crate) name: String,
+    pub(crate) display_name: Option<String>,
+    pub(crate) label: String,
+    pub(crate) city: Option<String>,
+    pub(crate) state: Option<String>,
 }
 
 #[derive(FromRow)]
@@ -53,22 +53,27 @@ pub(crate) async fn search(
     Query(query): Query<SearchQuery>,
 ) -> Result<Json<SearchResponse>, ApiError> {
     let limit = error::parse_limit(query.limit.as_deref(), SEARCH_DEFAULT, SEARCH_MAX)?;
-    let q = query.q.unwrap_or_default();
-    let q = q.trim();
-    if q.chars().count() < SEARCH_MIN_CHARS {
-        return Ok(Json(SearchResponse {
-            hospitals: Vec::new(),
-        }));
-    }
+    let hospitals = find_hospitals(&pool, query.q.as_deref().unwrap_or(""), limit).await?;
+    Ok(Json(SearchResponse { hospitals }))
+}
 
+pub(crate) async fn find_hospitals(
+    pool: &PgPool,
+    raw_query: &str,
+    limit: i64,
+) -> Result<Vec<SearchHit>, ApiError> {
+    let q = raw_query.trim();
+    if q.chars().count() < SEARCH_MIN_CHARS {
+        return Ok(Vec::new());
+    }
     let rows = sqlx::query_as::<_, SearchRow>(SEARCH_SQL)
         .bind(like_contains(q))
         .bind(q)
         .bind(like_prefix(q))
         .bind(limit)
-        .fetch_all(&pool)
+        .fetch_all(pool)
         .await?;
-    let hospitals = rows
+    Ok(rows
         .into_iter()
         .map(|row| SearchHit {
             label: public_name(&row.name, row.display_name.as_deref()).to_string(),
@@ -79,51 +84,50 @@ pub(crate) async fn search(
             city: row.city,
             state: row.state,
         })
-        .collect();
-    Ok(Json(SearchResponse { hospitals }))
+        .collect())
 }
 
 #[derive(Serialize)]
 pub(crate) struct ProfileResponse {
-    hospital: HospitalBody,
-    risk: Option<RiskScore>,
-    vendors: Vec<VendorLink>,
-    cehrt_reports: Vec<CehrtReport>,
-    breaches: Vec<BreachEvent>,
-    filings: Vec<SecFiling>,
-    exposures: Vec<Exposure>,
+    pub(crate) hospital: HospitalBody,
+    pub(crate) risk: Option<RiskScore>,
+    pub(crate) vendors: Vec<VendorLink>,
+    pub(crate) cehrt_reports: Vec<CehrtReport>,
+    pub(crate) breaches: Vec<BreachEvent>,
+    pub(crate) filings: Vec<SecFiling>,
+    pub(crate) exposures: Vec<Exposure>,
 }
 
 #[derive(Serialize)]
 pub(crate) struct HospitalBody {
     #[serde(flatten)]
-    hospital: Hospital,
-    label: String,
+    pub(crate) hospital: Hospital,
+    pub(crate) label: String,
 }
 
 #[derive(Debug, Serialize, FromRow)]
 pub(crate) struct VendorLink {
-    vendor_id: Uuid,
-    vendor_name: String,
-    category: Option<String>,
-    product_id: Option<Uuid>,
-    product_name: Option<String>,
-    version: Option<String>,
-    chpl_id: Option<String>,
-    source: String,
-    source_url: Option<String>,
-    confidence: Decimal,
-    last_verified: Option<NaiveDate>,
+    pub(crate) vendor_id: Uuid,
+    pub(crate) vendor_name: String,
+    pub(crate) category: Option<String>,
+    pub(crate) product_id: Option<Uuid>,
+    pub(crate) product_name: Option<String>,
+    pub(crate) version: Option<String>,
+    pub(crate) chpl_id: Option<String>,
+    pub(crate) source: String,
+    pub(crate) source_url: Option<String>,
+    pub(crate) confidence: Decimal,
+    pub(crate) last_verified: Option<NaiveDate>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
 pub(crate) struct CehrtReport {
-    cehrt_id: String,
-    meets_criteria: Option<bool>,
-    period_start: Option<NaiveDate>,
-    period_end: Option<NaiveDate>,
-    source: String,
-    source_url: Option<String>,
+    pub(crate) cehrt_id: String,
+    pub(crate) meets_criteria: Option<bool>,
+    pub(crate) period_start: Option<NaiveDate>,
+    pub(crate) period_end: Option<NaiveDate>,
+    pub(crate) source: String,
+    pub(crate) source_url: Option<String>,
 }
 
 pub(crate) async fn profile(
@@ -131,6 +135,10 @@ pub(crate) async fn profile(
     Path(id): Path<String>,
 ) -> Result<Json<ProfileResponse>, ApiError> {
     let id = error::parse_id(&id)?;
+    Ok(Json(load_profile(&pool, id).await?))
+}
+
+pub(crate) async fn load_profile(pool: &PgPool, id: Uuid) -> Result<ProfileResponse, ApiError> {
     let mut tx = pool.begin().await?;
     let hospital = sqlx::query_as::<_, Hospital>(HOSPITAL_SQL)
         .bind(id)
@@ -166,7 +174,7 @@ pub(crate) async fn profile(
     tx.commit().await?;
 
     let label = hospital.label().to_string();
-    Ok(Json(ProfileResponse {
+    Ok(ProfileResponse {
         hospital: HospitalBody { hospital, label },
         risk,
         vendors,
@@ -174,13 +182,13 @@ pub(crate) async fn profile(
         breaches,
         filings,
         exposures,
-    }))
+    })
 }
 
 #[derive(Serialize)]
 pub(crate) struct VulnerabilityResponse {
-    product_count: i64,
-    vulnerabilities: Vec<Vulnerability>,
+    pub(crate) product_count: i64,
+    pub(crate) vulnerabilities: Vec<Vulnerability>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -201,22 +209,29 @@ pub(crate) async fn vulnerabilities(
     Path(id): Path<String>,
 ) -> Result<Json<VulnerabilityResponse>, ApiError> {
     let id = error::parse_id(&id)?;
-    error::hospital_exists(&pool, id).await?;
+    Ok(Json(load_vulnerabilities(&pool, id).await?))
+}
+
+pub(crate) async fn load_vulnerabilities(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<VulnerabilityResponse, ApiError> {
+    error::hospital_exists(pool, id).await?;
     let product_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(DISTINCT product_id) FROM hospital_vendor_map
          WHERE hospital_id = $1 AND product_id IS NOT NULL",
     )
     .bind(id)
-    .fetch_one(&pool)
+    .fetch_one(pool)
     .await?;
     let vulnerabilities = sqlx::query_as::<_, Vulnerability>(VULNS_SQL)
         .bind(id)
-        .fetch_all(&pool)
+        .fetch_all(pool)
         .await?;
-    Ok(Json(VulnerabilityResponse {
+    Ok(VulnerabilityResponse {
         product_count,
         vulnerabilities,
-    }))
+    })
 }
 
 fn like_contains(query: &str) -> String {

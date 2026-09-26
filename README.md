@@ -48,7 +48,7 @@ cargo run -p vulnrx-etl -- score
 cargo run -p vulnrx-api
 ```
 
-`BIND_ADDR` defaults to `127.0.0.1:8080`.
+Open `http://127.0.0.1:8080` for search, the incident ticker, and a hospital profile. `BIND_ADDR` defaults to `127.0.0.1:8080`. The ticker lists linked OCR breaches and Item 1.05 filings only. A score component that was not an input is labeled that way.
 
 - `GET /api/hospitals/search?q=` matches name, display name, alias, or CCN
 - `GET /api/hospitals/{id}` returns the facility, vendor links, CEHRT ids, breaches, filings, exposures, and the latest rollup

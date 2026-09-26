@@ -12,28 +12,28 @@ use crate::hospitals::Vulnerability;
 
 #[derive(Serialize)]
 pub(crate) struct VendorResponse {
-    vendor: Vendor,
-    hospital_count: i64,
-    hospitals: Vec<VendorHospital>,
-    products: Vec<VendorProduct>,
-    breaches: Vec<BreachEvent>,
-    vulnerabilities: Vec<Vulnerability>,
+    pub(crate) vendor: Vendor,
+    pub(crate) hospital_count: i64,
+    pub(crate) hospitals: Vec<VendorHospital>,
+    pub(crate) products: Vec<VendorProduct>,
+    pub(crate) breaches: Vec<BreachEvent>,
+    pub(crate) vulnerabilities: Vec<Vulnerability>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
 pub(crate) struct VendorHospital {
-    id: Uuid,
-    name: String,
-    city: Option<String>,
-    state: Option<String>,
+    pub(crate) id: Uuid,
+    pub(crate) name: String,
+    pub(crate) city: Option<String>,
+    pub(crate) state: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
 pub(crate) struct VendorProduct {
-    id: Uuid,
-    name: String,
-    version: Option<String>,
-    chpl_id: Option<String>,
+    pub(crate) id: Uuid,
+    pub(crate) name: String,
+    pub(crate) version: Option<String>,
+    pub(crate) chpl_id: Option<String>,
 }
 
 pub(crate) async fn profile(
@@ -41,6 +41,10 @@ pub(crate) async fn profile(
     Path(id): Path<String>,
 ) -> Result<Json<VendorResponse>, ApiError> {
     let id = error::parse_id(&id)?;
+    Ok(Json(load_vendor(&pool, id).await?))
+}
+
+pub(crate) async fn load_vendor(pool: &PgPool, id: Uuid) -> Result<VendorResponse, ApiError> {
     let mut tx = pool.begin().await?;
     let vendor = sqlx::query_as::<_, Vendor>(
         "SELECT id, name, aliases, category FROM vendors WHERE id = $1",
@@ -78,14 +82,14 @@ pub(crate) async fn profile(
     tx.commit().await?;
 
     let hospital_count = i64::try_from(hospitals.len()).unwrap_or(i64::MAX);
-    Ok(Json(VendorResponse {
+    Ok(VendorResponse {
         vendor,
         hospital_count,
         hospitals,
         products,
         breaches,
         vulnerabilities,
-    }))
+    })
 }
 
 const HOSPITALS_SQL: &str = "

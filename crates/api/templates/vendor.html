@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  {% include "top.html" %}
+  <main class="profile">
+    <p class="back"><a href="/">Search</a></p>
+    <section class="panel">
+      <p class="kicker">vendor</p>
+      <h1>{{ name }}</h1>
+      <p class="lede">{{ summary }}</p>
+    </section>
+    <section class="stack">
+      <h2>Products</h2>
+      {% if products.is_empty() %}
+      <p class="empty">No product row is stored for this vendor.</p>
+      {% else %}
+      <ul class="facts">
+        {% for product in products %}
+        <li>{{ product }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+    <section class="stack">
+      <h2>Hospitals</h2>
+      {% if hospitals.is_empty() %}
+      <p class="empty">No hospital is linked to this vendor.</p>
+      {% else %}
+      <ul class="results">
+        {% for hospital in hospitals %}
+        <li>
+          <a href="/hospitals/{{ hospital.id }}">
+            <span class="result-name">{{ hospital.name }}</span>
+            {% if hospital.meta != "" %}<span class="result-meta">{{ hospital.meta }}</span>{% endif %}
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+  </main>
+  <footer><p>Hospital count is the number of sourced links. It is not a risk score for the vendor.</p></footer>
+  <script src="/static/htmx.min.js"></script>
+</body>
+</html>

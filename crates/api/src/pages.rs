@@ -1,0 +1,661 @@
+//! Server-rendered search, hospital profile, and vendor pages.
+
+use askama::Template;
+use axum::extract::{Path, Query, State};
+use axum::http::{StatusCode, header};
+use axum::response::{Html, IntoResponse, Response};
+use chrono::NaiveDate;
+use rust_decimal::Decimal;
+use serde::Deserialize;
+use sqlx::PgPool;
+use uuid::Uuid;
+
+use crate::error::{self, ApiError};
+use crate::hospitals::{self, SearchHit};
+use crate::incidents;
+
+const SEARCH_LIMIT: i64 = 10;
+const TICKER_LIMIT: i64 = 24;
+
+#[derive(Deserialize)]
+pub(crate) struct PageQuery {
+    q: Option<String>,
+}
+
+#[derive(Template)]
+#[template(path = "home.html")]
+struct HomePage {
+    title: String,
+    query: String,
+    short: bool,
+    searched: bool,
+    hits: Vec<Hit>,
+    incidents: Vec<IncidentCard>,
+}
+
+#[derive(Template)]
+#[template(path = "results.html")]
+struct ResultsPage {
+    short: bool,
+    searched: bool,
+    hits: Vec<Hit>,
+}
+
+#[derive(Template)]
+#[template(path = "hospital.html")]
+struct HospitalPage {
+    title: String,
+    incidents: Vec<IncidentCard>,
+    label: String,
+    place: String,
+    ccn: String,
+    public_entity: bool,
+    facility_source: String,
+    score_present: bool,
+    score_value: String,
+    score_width: String,
+    score_note: String,
+    score_breach: String,
+    score_cve: String,
+    score_exposure: String,
+    vendors: Vec<VendorCard>,
+    timeline: Vec<TimelineRow>,
+    cve_note: String,
+    cves: Vec<CveRow>,
+    exposures: Vec<ExposureRow>,
+    cehrt: Vec<CehrtRow>,
+}
+
+#[derive(Template)]
+#[template(path = "vendor.html")]
+struct VendorPage {
+    title: String,
+    incidents: Vec<IncidentCard>,
+    name: String,
+    summary: String,
+    products: Vec<String>,
+    hospitals: Vec<VendorHospitalRow>,
+}
+
+#[derive(Template)]
+#[template(path = "missing.html")]
+struct MissingPage {
+    title: String,
+    heading: String,
+    incidents: Vec<IncidentCard>,
+}
+
+struct Hit {
+    id: Uuid,
+    label: String,
+    meta: String,
+}
+
+struct IncidentCard {
+    href: String,
+    when: String,
+    name: String,
+    state: String,
+    detail: String,
+}
+
+struct VendorCard {
+    href: String,
+    vendor: String,
+    product: String,
+    meta: String,
+}
+
+struct TimelineRow {
+    when: String,
+    kind: String,
+    title: String,
+    body: String,
+    source_label: String,
+    source_href: String,
+}
+
+struct CveRow {
+    cve_id: String,
+    kev: bool,
+    product: String,
+    scores: String,
+    description: String,
+}
+
+struct ExposureRow {
+    service: String,
+    meta: String,
+}
+
+struct CehrtRow {
+    line: String,
+}
+
+struct VendorHospitalRow {
+    id: Uuid,
+    name: String,
+    meta: String,
+}
+
+pub(crate) async fn home(
+    State(pool): State<PgPool>,
+    Query(query): Query<PageQuery>,
+) -> Result<Response, ApiError> {
+    let raw = query.q.unwrap_or_default();
+    let (short, searched, hits) = search_state(&pool, &raw).await?;
+    Ok(render(
+        HomePage {
+            title: "VulnRx".to_string(),
+            query: raw.trim().to_string(),
+            short,
+            searched,
+            hits,
+            incidents: ticker(&pool).await?,
+        },
+        StatusCode::OK,
+    ))
+}
+
+pub(crate) async fn search_results(
+    State(pool): State<PgPool>,
+    Query(query): Query<PageQuery>,
+) -> Result<Response, ApiError> {
+    let raw = query.q.unwrap_or_default();
+    let (short, searched, hits) = search_state(&pool, &raw).await?;
+    Ok(render(
+        ResultsPage {
+            short,
+            searched,
+            hits,
+        },
+        StatusCode::OK,
+    ))
+}
+
+pub(crate) async fn hospital(
+    State(pool): State<PgPool>,
+    Path(id): Path<String>,
+) -> Result<Response, ApiError> {
+    let id = error::parse_id(&id)?;
+    let profile = match hospitals::load_profile(&pool, id).await {
+        Ok(profile) => profile,
+        Err(ApiError::NotFound(_)) => return missing(&pool, "Hospital not found").await,
+        Err(err) => return Err(err),
+    };
+    let vulns = hospitals::load_vulnerabilities(&pool, id).await?;
+    let incidents = ticker(&pool).await?;
+    let hospital = &profile.hospital.hospital;
+    let (score_present, score_value, score_width, score_note, score_breach, score_cve, score_exposure) =
+        score_fields(profile.risk.as_ref());
+    Ok(render(
+        HospitalPage {
+            title: format!("{} · VulnRx", profile.hospital.label),
+            label: profile.hospital.label.clone(),
+            place: location(
+                hospital.address.as_deref(),
+                hospital.city.as_deref(),
+                hospital.state.as_deref(),
+                hospital.zip.as_deref(),
+            ),
+            ccn: hospital.ccn.clone().unwrap_or_default(),
+            public_entity: hospital.is_public_entity,
+            facility_source: hospital
+                .source
+                .as_deref()
+                .map(source_label)
+                .unwrap_or_default()
+                .to_string(),
+            score_present,
+            score_value,
+            score_width,
+            score_note,
+            score_breach,
+            score_cve,
+            score_exposure,
+            vendors: profile
+                .vendors
+                .iter()
+                .map(|link| VendorCard {
+                    href: format!("/vendors/{}", link.vendor_id),
+                    vendor: link.vendor_name.clone(),
+                    product: product_line(link.product_name.as_deref(), link.version.as_deref()),
+                    meta: vendor_meta(link),
+                })
+                .collect(),
+            timeline: timeline(&profile),
+            cve_note: cve_note(vulns.product_count, vulns.vulnerabilities.len()),
+            cves: vulns
+                .vulnerabilities
+                .iter()
+                .map(|cve| CveRow {
+                    cve_id: cve.cve_id.clone(),
+                    kev: cve.is_kev == Some(true),
+                    product: format!("{} · {}", cve.vendor_name, cve.product_name),
+                    scores: cve_scores(cve),
+                    description: cve.description.clone().unwrap_or_default(),
+                })
+                .collect(),
+            exposures: profile
+                .exposures
+                .iter()
+                .map(|row| ExposureRow {
+                    service: row
+                        .exposed_service
+                        .clone()
+                        .unwrap_or_else(|| "index hit".to_string()),
+                    meta: exposure_meta(row),
+                })
+                .collect(),
+            cehrt: profile
+                .cehrt_reports
+                .iter()
+                .map(|row| CehrtRow {
+                    line: cehrt_line(row),
+                })
+                .collect(),
+            incidents,
+        },
+        StatusCode::OK,
+    ))
+}
+
+pub(crate) async fn vendor(
+    State(pool): State<PgPool>,
+    Path(id): Path<String>,
+) -> Result<Response, ApiError> {
+    let id = error::parse_id(&id)?;
+    let vendor = match crate::vendors::load_vendor(&pool, id).await {
+        Ok(vendor) => vendor,
+        Err(ApiError::NotFound(_)) => return missing(&pool, "Vendor not found").await,
+        Err(err) => return Err(err),
+    };
+    let count = grouped(vendor.hospital_count);
+    Ok(render(
+        VendorPage {
+            title: format!("{} · VulnRx", vendor.vendor.name),
+            name: vendor.vendor.name.clone(),
+            summary: format!(
+                "{count} hospitals have a public source linking this vendor."
+            ),
+            products: vendor
+                .products
+                .iter()
+                .map(|product| {
+                    let mut line = product.name.clone();
+                    if let Some(version) = product.version.as_deref().filter(|v| !v.is_empty()) {
+                        line.push(' ');
+                        line.push_str(version);
+                    }
+                    if let Some(chpl) = product.chpl_id.as_deref().filter(|v| !v.is_empty()) {
+                        line.push_str(" · CHPL ");
+                        line.push_str(chpl);
+                    }
+                    line
+                })
+                .collect(),
+            hospitals: vendor
+                .hospitals
+                .iter()
+                .map(|hospital| VendorHospitalRow {
+                    id: hospital.id,
+                    name: hospital.name.clone(),
+                    meta: match (hospital.city.as_deref(), hospital.state.as_deref()) {
+                        (Some(city), Some(state)) if !city.is_empty() => format!("{city}, {state}"),
+                        (_, Some(state)) => state.to_string(),
+                        (Some(city), _) if !city.is_empty() => city.to_string(),
+                        _ => String::new(),
+                    },
+                })
+                .collect(),
+            incidents: ticker(&pool).await?,
+        },
+        StatusCode::OK,
+    ))
+}
+
+pub(crate) async fn css() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        include_str!("../static/app.css"),
+    )
+}
+
+pub(crate) async fn script() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        include_str!("../static/htmx.min.js"),
+    )
+}
+
+pub(crate) async fn favicon() -> StatusCode {
+    StatusCode::NO_CONTENT
+}
+
+async fn missing(pool: &PgPool, heading: &str) -> Result<Response, ApiError> {
+    Ok(render(
+        MissingPage {
+            title: format!("{heading} · VulnRx"),
+            heading: heading.to_string(),
+            incidents: ticker(pool).await?,
+        },
+        StatusCode::NOT_FOUND,
+    ))
+}
+
+async fn ticker(pool: &PgPool) -> Result<Vec<IncidentCard>, ApiError> {
+    let rows = incidents::load_incidents(pool, TICKER_LIMIT).await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let mut detail = row.detail.unwrap_or_default();
+            let source = source_label(&row.source);
+            if detail.is_empty() {
+                detail = source.to_string();
+            } else {
+                detail.push_str(" · ");
+                detail.push_str(source);
+            }
+            IncidentCard {
+                href: format!("/hospitals/{}", row.hospital_id),
+                when: row
+                    .occurred_on
+                    .map(|date| date.to_string())
+                    .unwrap_or_else(|| "undated".to_string()),
+                name: row.hospital_name,
+                state: row.state.unwrap_or_default(),
+                detail,
+            }
+        })
+        .collect())
+}
+
+async fn search_state(
+    pool: &PgPool,
+    raw: &str,
+) -> Result<(bool, bool, Vec<Hit>), ApiError> {
+    let trimmed = raw.trim();
+    let chars = trimmed.chars().count();
+    if chars == 0 {
+        return Ok((false, false, Vec::new()));
+    }
+    if chars < 2 {
+        return Ok((true, false, Vec::new()));
+    }
+    let hits = hospitals::find_hospitals(pool, trimmed, SEARCH_LIMIT)
+        .await?
+        .into_iter()
+        .map(hit_from)
+        .collect();
+    Ok((false, true, hits))
+}
+
+fn hit_from(hit: SearchHit) -> Hit {
+    let mut parts = Vec::new();
+    match (hit.city.as_deref(), hit.state.as_deref()) {
+        (Some(city), Some(state)) if !city.is_empty() => parts.push(format!("{city}, {state}")),
+        (_, Some(state)) => parts.push(state.to_string()),
+        (Some(city), _) if !city.is_empty() => parts.push(city.to_string()),
+        _ => {}
+    }
+    if let Some(ccn) = hit.ccn.as_deref() {
+        parts.push(format!("CCN {ccn}"));
+    }
+    Hit {
+        id: hit.id,
+        label: hit.label,
+        meta: parts.join(" · "),
+    }
+}
+
+fn score_fields(
+    risk: Option<&vulnrx_models::RiskScore>,
+) -> (bool, String, String, String, String, String, String) {
+    let Some(risk) = risk else {
+        return (
+            false,
+            String::new(),
+            "0%".to_string(),
+            "No rollup is stored. A score is written only when a linked breach, Item 1.05 filing, product CVE, or exposure exists.".to_string(),
+            String::new(),
+            String::new(),
+            String::new(),
+        );
+    };
+    let width = format!("{}%", percent(&risk.composite_score));
+    (
+        true,
+        risk.composite_score.to_string(),
+        width,
+        score_note(&risk.method),
+        component_text(&risk.method, "breach", &risk.breach_component),
+        component_text(&risk.method, "cve", &risk.cve_component),
+        component_text(&risk.method, "exposure", &risk.exposure_component),
+    )
+}
+
+fn score_note(method: &str) -> String {
+    let Some(inputs) = method.strip_prefix("v1:") else {
+        return format!("Method {method}.");
+    };
+    let parts: Vec<&str> = inputs.split('+').filter(|part| !part.is_empty()).collect();
+    let mut missing = Vec::new();
+    for name in ["breach", "cve", "exposure"] {
+        if !parts.contains(&name) {
+            missing.push(name);
+        }
+    }
+    if missing.is_empty() {
+        format!("Inputs: {}.", parts.join(", "))
+    } else {
+        format!(
+            "Inputs: {}. Not inputs: {}.",
+            parts.join(", "),
+            missing.join(", ")
+        )
+    }
+}
+
+fn component_text(method: &str, key: &str, value: &Decimal) -> String {
+    let inputs = method.strip_prefix("v1:").unwrap_or("");
+    if inputs.split('+').any(|part| part == key) {
+        value.to_string()
+    } else {
+        "not an input".to_string()
+    }
+}
+
+fn percent(score: &Decimal) -> u8 {
+    let text = score.round_dp(0).to_string();
+    text.parse::<u16>().unwrap_or(0).min(100) as u8
+}
+
+fn timeline(profile: &hospitals::ProfileResponse) -> Vec<TimelineRow> {
+    let mut rows: Vec<(Option<NaiveDate>, TimelineRow)> = Vec::new();
+    for breach in &profile.breaches {
+        let mut body = Vec::new();
+        if let Some(kind) = breach.breach_type.as_deref() {
+            body.push(kind.to_string());
+        }
+        if let Some(count) = breach.individuals_affected {
+            body.push(format!("{} people", grouped(i64::from(count))));
+        }
+        if let Some(location) = breach.breach_location.as_deref().filter(|v| !v.is_empty()) {
+            body.push(location.to_string());
+        }
+        rows.push((
+            breach.date_reported,
+            TimelineRow {
+                when: date_text(breach.date_reported),
+                kind: "breach".to_string(),
+                title: breach.entity_name.clone(),
+                body: body.join(" · "),
+                source_label: source_label(&breach.source).to_string(),
+                source_href: safe_href(breach.source_url.as_deref())
+                    .unwrap_or_default()
+                    .to_string(),
+            },
+        ));
+    }
+    for filing in &profile.filings {
+        rows.push((
+            filing.filed_date,
+            TimelineRow {
+                when: date_text(filing.filed_date),
+                kind: "filing".to_string(),
+                title: filing
+                    .filing_type
+                    .clone()
+                    .unwrap_or_else(|| filing.company_name.clone()),
+                body: filing.summary.clone().unwrap_or_default(),
+                source_label: source_label(&filing.source).to_string(),
+                source_href: safe_href(filing.source_url.as_deref())
+                    .unwrap_or_default()
+                    .to_string(),
+            },
+        ));
+    }
+    rows.sort_by_key(|row| std::cmp::Reverse(row.0));
+    rows.into_iter().map(|(_, row)| row).collect()
+}
+
+fn cve_note(product_count: i64, vuln_count: usize) -> String {
+    if vuln_count == 0 && product_count == 0 {
+        "No certified product is linked to this hospital.".to_string()
+    } else if vuln_count == 0 {
+        format!("{product_count} certified products are linked. None is linked to a CVE.")
+    } else {
+        format!("{vuln_count} linked CVE records.")
+    }
+}
+
+fn cve_scores(cve: &hospitals::Vulnerability) -> String {
+    let mut parts = Vec::new();
+    if let Some(cvss) = cve.cvss_score.as_ref() {
+        parts.push(format!("CVSS {cvss}"));
+    }
+    if let Some(epss) = cve.epss_score.as_ref() {
+        parts.push(format!("EPSS {epss}"));
+    }
+    if let Some(basis) = cve.match_basis.as_deref().filter(|v| !v.is_empty()) {
+        parts.push(format!("match {basis}"));
+    }
+    parts.join(" · ")
+}
+
+fn exposure_meta(row: &vulnrx_models::Exposure) -> String {
+    let mut parts = vec![source_label(&row.source).to_string()];
+    if let Some(seen) = row.last_seen {
+        parts.push(seen.to_string());
+    }
+    parts.push(row.raw_reference.clone());
+    parts.join(" · ")
+}
+
+fn cehrt_line(row: &hospitals::CehrtReport) -> String {
+    let mut line = row.cehrt_id.clone();
+    if let Some(meets) = row.meets_criteria {
+        line.push_str(if meets {
+            " · meets criteria"
+        } else {
+            " · does not meet criteria"
+        });
+    }
+    if let Some(end) = row.period_end {
+        line.push_str(" · period ending ");
+        line.push_str(&end.to_string());
+    }
+    line.push_str(" · ");
+    line.push_str(source_label(&row.source));
+    line
+}
+
+fn product_line(name: Option<&str>, version: Option<&str>) -> String {
+    match name.filter(|value| !value.is_empty()) {
+        Some(name) => match version.filter(|value| !value.is_empty()) {
+            Some(version) => format!("{name} {version}"),
+            None => name.to_string(),
+        },
+        None => "No product named on this link.".to_string(),
+    }
+}
+
+fn vendor_meta(link: &hospitals::VendorLink) -> String {
+    format!(
+        "{} · confidence {}",
+        source_label(&link.source),
+        link.confidence
+    )
+}
+
+fn location(address: Option<&str>, city: Option<&str>, state: Option<&str>, zip: Option<&str>) -> String {
+    let mut parts = Vec::new();
+    if let Some(address) = address.filter(|value| !value.is_empty()) {
+        parts.push(address.to_string());
+    }
+    let mut city_line = String::new();
+    if let Some(city) = city.filter(|value| !value.is_empty()) {
+        city_line.push_str(city);
+    }
+    if let Some(state) = state.filter(|value| !value.is_empty()) {
+        if !city_line.is_empty() {
+            city_line.push_str(", ");
+        }
+        city_line.push_str(state);
+    }
+    if let Some(zip) = zip.filter(|value| !value.is_empty()) {
+        if !city_line.is_empty() {
+            city_line.push(' ');
+        }
+        city_line.push_str(zip);
+    }
+    if !city_line.is_empty() {
+        parts.push(city_line);
+    }
+    parts.join(" · ")
+}
+
+fn date_text(date: Option<NaiveDate>) -> String {
+    date.map(|value| value.to_string())
+        .unwrap_or_else(|| "undated".to_string())
+}
+
+fn source_label(source: &str) -> &str {
+    match source {
+        "hhs_ocr_breach_portal" => "HHS OCR breach portal",
+        "sec_edgar" => "SEC EDGAR",
+        "cms_pi_chpl" => "CMS promoting interoperability / CHPL",
+        "cms_pi_2024" => "CMS 2024 promoting interoperability",
+        "cms_hospital_general_information" => "CMS hospital general information",
+        "shodan" => "Shodan",
+        "censys" => "Censys",
+        other => other,
+    }
+}
+
+fn safe_href(url: Option<&str>) -> Option<&str> {
+    url.filter(|value| value.starts_with("https://") || value.starts_with("http://"))
+}
+
+fn grouped(n: i64) -> String {
+    let digits = n.unsigned_abs().to_string();
+    let mut out = String::new();
+    for (index, ch) in digits.chars().rev().enumerate() {
+        if index > 0 && index.is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(ch);
+    }
+    let text: String = out.chars().rev().collect();
+    if n < 0 { format!("-{text}") } else { text }
+}
+
+fn render<T: Template>(template: T, status: StatusCode) -> Response {
+    match template.render() {
+        Ok(body) => (status, Html(body)).into_response(),
+        Err(err) => {
+            eprintln!("template error: {err}");
+            (StatusCode::INTERNAL_SERVER_ERROR, "template error").into_response()
+        }
+    }
+}
