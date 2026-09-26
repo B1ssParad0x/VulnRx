@@ -22,6 +22,16 @@ pub enum IngestError {
     HttpStatus { url: String, status: u16 },
     #[error("state filter must be two letters, got `{0}`")]
     BadState(String),
+    #[error("csv is missing the {0} column")]
+    MissingColumn(String),
+    #[error("csv error: {0}")]
+    Csv(#[from] csv::Error),
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("json error: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("CHPL_API_KEY is not set, so CEHRT bundles cannot be expanded into products")]
+    MissingApiKey,
     #[error(transparent)]
     Migrate(#[from] sqlx::migrate::MigrateError),
 }
@@ -76,6 +86,8 @@ async fn load_stage(
     let mut tx = conn.begin().await?;
     let hospitals = sqlx::query(UPSERT_HOSPITALS)
         .bind(state)
+        .bind(PI_LINK_SOURCE)
+        .bind(source_url)
         .execute(&mut *tx)
         .await?
         .rows_affected();
@@ -145,7 +157,7 @@ CREATE TEMP TABLE pi_stage (
 "#;
 
 const UPSERT_HOSPITALS: &str = r#"
-INSERT INTO hospitals (ccn, name, city, state, address, zip, phone)
+INSERT INTO hospitals (ccn, name, city, state, address, zip, phone, source, source_url)
 SELECT DISTINCT ON ("Facility.ID")
     btrim("Facility.ID"),
     btrim("Facility.Name"),
@@ -153,7 +165,9 @@ SELECT DISTINCT ON ("Facility.ID")
     NULLIF(btrim("State"), ''),
     NULLIF(btrim("Address"), ''),
     NULLIF(btrim("ZIP.Code"), ''),
-    NULLIF(btrim("Telephone.Number"), '')
+    NULLIF(btrim("Telephone.Number"), ''),
+    $2,
+    $3
 FROM pi_stage
 WHERE "Facility.ID" ~ '^[0-9]{6}$'
   AND btrim(COALESCE("Facility.Name", '')) <> ''
@@ -166,12 +180,8 @@ ORDER BY "Facility.ID",
     END DESC NULLS LAST
 ON CONFLICT (ccn) WHERE ccn IS NOT NULL
 DO UPDATE SET
-    name = EXCLUDED.name,
-    city = EXCLUDED.city,
-    state = EXCLUDED.state,
-    address = EXCLUDED.address,
-    zip = EXCLUDED.zip,
-    phone = EXCLUDED.phone
+    source = COALESCE(hospitals.source, EXCLUDED.source),
+    source_url = COALESCE(hospitals.source_url, EXCLUDED.source_url)
 "#;
 
 const UPSERT_VENDORS: &str = r#"

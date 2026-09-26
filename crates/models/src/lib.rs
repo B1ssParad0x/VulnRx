@@ -20,6 +20,7 @@ pub use vendor::{InvalidVendorCategory, Product, Vendor, VendorCategory};
 pub use vuln::{Cve, ProductCveMap};
 
 /// Applies embedded SQL migrations. Safe to call on every startup.
+/// New files under `migrations/` are picked up the next time this crate builds.
 pub async fn migrate(pool: &sqlx::PgPool) -> Result<(), sqlx::migrate::MigrateError> {
     sqlx::migrate!("../../migrations").run(pool).await
 }

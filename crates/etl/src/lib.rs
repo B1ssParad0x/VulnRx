@@ -1,9 +1,14 @@
-//! Load the ONC file that joins CMS Promoting Interoperability hospital reports
-//! to Certified Health IT Product List (CHPL) listings.
+//! Load public CMS and ONC files into the VulnRx store.
 
+mod chpl;
+mod hospitals;
 mod load;
+mod pi2024;
 
+pub use chpl::{BundleProduct, CehrtBundle, ExpandReport, expand_cehrt, link_cehrt_bundles};
+pub use hospitals::{HOSPITAL_REGISTRY_URL, HospitalLoadReport, ingest_hospital_registry};
 pub use load::{IngestError, IngestReport, ingest_pi_csv};
+pub use pi2024::{PI_2024_URL, Pi2024Report, ingest_pi_2024};
 
 /// Public CSV published by ONC. Each row is a hospital-reported CEHRT id joined to a CHPL product.
 pub const PI_CHPL_CSV_URL: &str = "https://healthit.gov/data/wp-content/uploads/sites/2/2025/06/hospital-promoting-interoperability-2023-chpl-linkage.csv";
@@ -15,8 +20,8 @@ pub const PI_LINK_CONFIDENCE: rust_decimal::Decimal =
 
 pub const PI_LINK_SOURCE: &str = "cms_pi_chpl";
 
-/// Download the linkage CSV. Does not write the database.
-pub async fn download_pi_csv(url: &str) -> Result<Vec<u8>, IngestError> {
+/// Download a public CSV. Does not write the database.
+pub async fn download_csv(url: &str) -> Result<Vec<u8>, IngestError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(120))
         .user_agent("vulnrx/0.1")

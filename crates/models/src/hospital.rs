@@ -18,6 +18,9 @@ pub struct Hospital {
     pub zip: Option<String>,
     pub phone: Option<String>,
     pub is_public_entity: bool,
+    /// Public source of this facility record. Vendor links cite their own sources.
+    pub source: Option<String>,
+    pub source_url: Option<String>,
 }
 
 impl Hospital {
@@ -63,6 +66,8 @@ mod tests {
             zip: None,
             phone: None,
             is_public_entity: false,
+            source: None,
+            source_url: None,
         }
     }
 

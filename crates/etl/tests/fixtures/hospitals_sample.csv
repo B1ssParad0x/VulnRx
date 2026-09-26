@@ -1,0 +1,5 @@
+"Facility ID","Facility Name","Address","City/Town","State","ZIP Code","Telephone Number","Hospital Ownership"
+010001,SOUTHEAST HEALTH MEDICAL CENTER,1108 ROSS CLARK CIRCLE,DOTHAN,AL,36301,(334) 793-8701,Government - Hospital District or Authority
+010006,NORTH ALABAMA MEDICAL CENTER,1701 VETERANS DRIVE,FLORENCE,AL,35630,(256) 768-8400,Proprietary
+01014F,BIRMINGHAM VA MEDICAL CENTER,700 SOUTH 19TH STREET,BIRMINGHAM,AL,35233,(205) 933-4515,Veterans Health Administration
+BAD,not a hospital,,,,,,

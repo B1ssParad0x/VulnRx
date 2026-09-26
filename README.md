@@ -25,11 +25,13 @@ cargo test -p vulnrx-models
 
 ## Hospital products
 
-[`vulnrx-etl`](crates/etl) loads the ONC file that joins CMS Promoting Interoperability hospital reports to CHPL products. Each stored link keeps that file URL as its source. The CHPL API itself requires a key; this file is the public join ONC already published.
+[`vulnrx-etl`](crates/etl) loads public CMS and ONC files. Vendor links are written only when a file or a CHPL lookup names the product.
 
 ```bash
-cargo run -p vulnrx-etl
-cargo run -p vulnrx-etl -- --state MO
+cargo run -p vulnrx-etl -- hospitals
+cargo run -p vulnrx-etl -- pi
+cargo run -p vulnrx-etl -- pi-2024
+cargo run -p vulnrx-etl -- expand-cehrt
 ```
 
-`--state` limits the load to one USPS code. The default reads every row in the file.
+`hospitals` loads every Medicare-registered hospital and does not invent vendor links. `pi` loads the 2023 ONC file that already joins each hospital to CHPL products. `pi-2024` stores the newer bundle id CMS published for each hospital. `expand-cehrt` asks CHPL which products are inside those ids; it requires `CHPL_API_KEY` from `.env.example`. `--state` limits `hospitals`, `pi`, and `pi-2024` to one USPS code.

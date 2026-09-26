@@ -63,6 +63,12 @@ async fn linkage_csv_upserts_real_rows_and_skips_a_bad_ccn() {
     assert_eq!(city, "INDEPENDENCE");
     assert_eq!(zip, "64057");
     assert_eq!(phone, "(816) 698-7000");
+    let facility_source: String =
+        sqlx::query_scalar("SELECT source FROM hospitals WHERE ccn = '260095'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(facility_source, vulnrx_etl::PI_LINK_SOURCE);
 
     let vendor_category: Option<String> =
         sqlx::query_scalar("SELECT category FROM vendors WHERE name = 'Surescripts, LLC'")
