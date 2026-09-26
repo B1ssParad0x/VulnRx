@@ -1,5 +1,7 @@
 //! Server-rendered search, hospital profile, and vendor pages.
 
+use std::collections::HashMap;
+
 use askama::Template;
 use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
@@ -23,14 +25,33 @@ pub(crate) struct PageQuery {
 }
 
 #[derive(Template)]
-#[template(path = "home.html")]
-struct HomePage {
+#[template(path = "landing.html")]
+struct LandingPage {
+    title: String,
+    incidents: Vec<IncidentCard>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct DashboardQuery {
+    q: Option<String>,
+    state: Option<String>,
+}
+
+#[derive(Template)]
+#[template(path = "dashboard.html")]
+struct DashboardPage {
     title: String,
     query: String,
     short: bool,
     searched: bool,
     hits: Vec<Hit>,
     incidents: Vec<IncidentCard>,
+    map_style: String,
+    selected: String,
+    selected_name: String,
+    hospital_count: String,
+    breach_count: String,
+    state_hospitals: Vec<StateHospital>,
 }
 
 #[derive(Template)]
@@ -138,20 +159,81 @@ struct VendorHospitalRow {
     meta: String,
 }
 
-pub(crate) async fn home(
+struct StateHospital {
+    id: Uuid,
+    name: String,
+    meta: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct StateCountRow {
+    state: String,
+    hospitals: i64,
+    with_breach: i64,
+}
+
+#[derive(sqlx::FromRow)]
+struct StateHospitalRow {
+    id: Uuid,
+    name: String,
+    city: Option<String>,
+    breaches: i64,
+}
+
+pub(crate) async fn home(State(pool): State<PgPool>) -> Result<Response, ApiError> {
+    Ok(render(
+        LandingPage {
+            title: "VulnRx".to_string(),
+            incidents: ticker(&pool).await?,
+        },
+        StatusCode::OK,
+    ))
+}
+
+pub(crate) async fn dashboard(
     State(pool): State<PgPool>,
-    Query(query): Query<PageQuery>,
+    Query(query): Query<DashboardQuery>,
 ) -> Result<Response, ApiError> {
     let raw = query.q.unwrap_or_default();
     let (short, searched, hits) = search_state(&pool, &raw).await?;
+    let selected = query
+        .state
+        .as_deref()
+        .map(str::trim)
+        .filter(|code| {
+            code.len() == 2 && code.chars().all(|ch| ch.is_ascii_alphabetic())
+        })
+        .map(|code| code.to_ascii_uppercase())
+        .filter(|code| state_name(code) != code.as_str());
+    let counts = state_counts(&pool).await?;
+    let (selected_name, hospital_count, breach_count, state_hospitals) = match selected.as_deref()
+    {
+        Some(code) => {
+            let stats = counts.get(code).copied().unwrap_or((0, 0));
+            let rows = state_breach_hospitals(&pool, code).await?;
+            (
+                state_name(code).to_string(),
+                format!("{} hospitals", grouped(stats.0)),
+                grouped(stats.1),
+                rows,
+            )
+        }
+        None => (String::new(), String::new(), String::new(), Vec::new()),
+    };
     Ok(render(
-        HomePage {
-            title: "VulnRx".to_string(),
+        DashboardPage {
+            title: "Map · VulnRx".to_string(),
             query: raw.trim().to_string(),
             short,
             searched,
             hits,
             incidents: ticker(&pool).await?,
+            map_style: map_style(&counts, selected.as_deref()),
+            selected: selected.unwrap_or_default(),
+            selected_name,
+            hospital_count,
+            breach_count,
+            state_hospitals,
         },
         StatusCode::OK,
     ))
@@ -368,6 +450,149 @@ async fn ticker(pool: &PgPool) -> Result<Vec<IncidentCard>, ApiError> {
             }
         })
         .collect())
+}
+
+async fn state_counts(pool: &PgPool) -> Result<HashMap<String, (i64, i64)>, ApiError> {
+    let rows = sqlx::query_as::<_, StateCountRow>(
+        "SELECT h.state AS state,
+                COUNT(*)::bigint AS hospitals,
+                COUNT(DISTINCT b.hospital_id)::bigint AS with_breach
+         FROM hospitals h
+         LEFT JOIN breach_events b ON b.hospital_id = h.id
+         WHERE h.state IS NOT NULL
+         GROUP BY h.state",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.state, (row.hospitals, row.with_breach)))
+        .collect())
+}
+
+async fn state_breach_hospitals(
+    pool: &PgPool,
+    state: &str,
+) -> Result<Vec<StateHospital>, ApiError> {
+    let rows = sqlx::query_as::<_, StateHospitalRow>(
+        "SELECT h.id, h.name, h.city, COUNT(b.id)::bigint AS breaches
+         FROM hospitals h
+         JOIN breach_events b ON b.hospital_id = h.id
+         WHERE h.state = $1
+         GROUP BY h.id, h.name, h.city
+         ORDER BY breaches DESC, h.name
+         LIMIT 12",
+    )
+    .bind(state)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let place = row.city.unwrap_or_default();
+            let breaches = if row.breaches == 1 {
+                "1 linked breach".to_string()
+            } else {
+                format!("{} linked breaches", grouped(row.breaches))
+            };
+            let meta = if place.is_empty() {
+                breaches
+            } else {
+                format!("{place} · {breaches}")
+            };
+            StateHospital {
+                id: row.id,
+                name: row.name,
+                meta,
+            }
+        })
+        .collect())
+}
+
+fn map_style(counts: &HashMap<String, (i64, i64)>, selected: Option<&str>) -> String {
+    let mut css = String::new();
+    for (code, stats) in counts {
+        if code.len() == 2 && code.chars().all(|ch| ch.is_ascii_uppercase()) {
+            css.push_str(&format!(
+                ".us-map .{} {{ fill: {}; }}\n",
+                code.to_ascii_lowercase(),
+                breach_fill(stats.1)
+            ));
+        }
+    }
+    if let Some(code) = selected {
+        css.push_str(&format!(
+            ".us-map a[href$=\"state={code}\"] path, .us-map a[href$=\"state={code}\"] circle {{ stroke: #c6f54a; stroke-width: 2px; }}\n"
+        ));
+    }
+    css
+}
+
+fn breach_fill(count: i64) -> &'static str {
+    match count {
+        0 => "#172018",
+        1..=2 => "#6a3414",
+        3..=7 => "#9a3e10",
+        8..=15 => "#d45312",
+        _ => "#ff6a1a",
+    }
+}
+
+fn state_name(code: &str) -> &str {
+    match code {
+        "AL" => "Alabama",
+        "AK" => "Alaska",
+        "AZ" => "Arizona",
+        "AR" => "Arkansas",
+        "CA" => "California",
+        "CO" => "Colorado",
+        "CT" => "Connecticut",
+        "DE" => "Delaware",
+        "DC" => "District of Columbia",
+        "FL" => "Florida",
+        "GA" => "Georgia",
+        "HI" => "Hawaii",
+        "ID" => "Idaho",
+        "IL" => "Illinois",
+        "IN" => "Indiana",
+        "IA" => "Iowa",
+        "KS" => "Kansas",
+        "KY" => "Kentucky",
+        "LA" => "Louisiana",
+        "ME" => "Maine",
+        "MD" => "Maryland",
+        "MA" => "Massachusetts",
+        "MI" => "Michigan",
+        "MN" => "Minnesota",
+        "MS" => "Mississippi",
+        "MO" => "Missouri",
+        "MT" => "Montana",
+        "NE" => "Nebraska",
+        "NV" => "Nevada",
+        "NH" => "New Hampshire",
+        "NJ" => "New Jersey",
+        "NM" => "New Mexico",
+        "NY" => "New York",
+        "NC" => "North Carolina",
+        "ND" => "North Dakota",
+        "OH" => "Ohio",
+        "OK" => "Oklahoma",
+        "OR" => "Oregon",
+        "PA" => "Pennsylvania",
+        "RI" => "Rhode Island",
+        "SC" => "South Carolina",
+        "SD" => "South Dakota",
+        "TN" => "Tennessee",
+        "TX" => "Texas",
+        "UT" => "Utah",
+        "VT" => "Vermont",
+        "VA" => "Virginia",
+        "WA" => "Washington",
+        "WV" => "West Virginia",
+        "WI" => "Wisconsin",
+        "WY" => "Wyoming",
+        other => other,
+    }
 }
 
 async fn search_state(

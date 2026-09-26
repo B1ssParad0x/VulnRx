@@ -140,12 +140,20 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
     let home = call_text(&pool, "/").await;
     assert_eq!(home.status, StatusCode::OK);
     assert!(home.body.contains("VULNRX"));
+    assert!(home.body.contains("Open the map"));
     assert!(home.body.contains("Mercy Downtown"));
     assert!(home.body.contains("SOUTHEAST HEALTH MEDICAL CENTER"));
     assert!(!home.body.contains("Unlinked Clinic"));
     assert!(!home.body.contains("10-K Item 1C"));
 
-    let typed = call_text(&pool, "/?q=south").await;
+    let dash = call_text(&pool, "/dashboard").await;
+    assert_eq!(dash.status, StatusCode::OK);
+    assert!(dash.body.contains("state=AL"));
+    assert!(dash.body.contains("linked HHS OCR breach"));
+    let alabama = call_text(&pool, "/dashboard?state=AL").await;
+    assert!(alabama.body.contains("Alabama"));
+    assert!(alabama.body.contains("SOUTHEAST HEALTH MEDICAL CENTER"));
+    let typed = call_text(&pool, "/dashboard?q=south").await;
     assert!(typed.body.contains("SOUTHEAST HEALTH MEDICAL CENTER"));
     let fragment = call_text(&pool, "/search?q=south").await;
     assert!(fragment.body.contains("SOUTHEAST HEALTH MEDICAL CENTER"));

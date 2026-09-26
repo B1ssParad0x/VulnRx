@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="dash-body">
+  <div class="dash">
+    {% include "top.html" %}
+    <div class="map-stage">
+      <svg class="us-map" viewBox="0 0 959 593" role="img" aria-label="United States. Color shows hospitals with a linked breach report.">
+        <style>{{ map_style|safe }}</style>
+        {% include "us_map.html" %}
+      </svg>
+      {% if selected != "" %}
+      <aside class="state-card">
+        <p class="kicker">{{ selected_name }}</p>
+        <p>{{ hospital_count }} in the registry. {{ breach_count }} with a linked breach.</p>
+        {% if state_hospitals.is_empty() %}
+        <p class="empty">No linked breach in this state.</p>
+        {% else %}
+        <ul class="state-list">
+          {% for row in state_hospitals %}
+          <li><a href="/hospitals/{{ row.id }}">{{ row.name }}</a><span>{{ row.meta }}</span></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        <a class="clear-state" href="/dashboard">Clear state</a>
+      </aside>
+      {% endif %}
+    </div>
+    <form class="dock" action="/dashboard" method="get" role="search">
+      <p class="map-note">Color is how many hospitals in that state have a linked HHS OCR breach. Alaska and Hawaii are inset.</p>
+      {% if selected != "" %}<input type="hidden" name="state" value="{{ selected }}">{% endif %}
+      <label class="sr" for="q">Hospital name or CCN</label>
+      <div id="results">
+        {% include "results.html" %}
+      </div>
+      <input id="q" type="search" name="q" value="{{ query }}" placeholder="Hospital name or CCN" autocomplete="off" hx-get="/search" hx-trigger="keyup changed delay:200ms" hx-target="#results" hx-sync="this:replace">
+    </form>
+  </div>
+  <script src="/static/htmx.min.js"></script>
+</body>
+</html>

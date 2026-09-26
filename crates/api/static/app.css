@@ -336,4 +336,189 @@ footer {
 
 @media (prefers-reduced-motion: reduce) {
   .ticker-track { animation: none; }
+  .wave { animation: none; }
+}
+
+.map-link {
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+
+.landing {
+  position: relative;
+  min-height: calc(100vh - 7rem);
+  display: grid;
+  place-items: center;
+  padding: 2rem 1.25rem 4rem;
+  overflow: hidden;
+}
+
+.signal {
+  position: absolute;
+  inset: auto 0 0;
+  width: 100%;
+  height: 70%;
+  pointer-events: none;
+}
+
+.wave {
+  fill: none;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  animation: drift 18s ease-in-out infinite;
+}
+
+.w1 { stroke: #ff6a1a; opacity: 0.85; }
+.w2 { stroke: #c6f54a; opacity: 0.45; animation-delay: -4s; }
+.w3 { stroke: #ff6a1a; opacity: 0.28; animation-delay: -8s; }
+.w4 { stroke: #9a3e10; opacity: 0.7; animation-delay: -2s; }
+
+@keyframes drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-18px); }
+}
+
+.landing-copy {
+  position: relative;
+  width: min(740px, 100%);
+}
+
+.landing-copy h1 {
+  margin: 0.3rem 0 0.8rem;
+  font-size: clamp(2.4rem, 6vw, 4.4rem);
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+}
+
+.enter {
+  display: inline-block;
+  margin-top: 1.2rem;
+  padding: 0.7rem 1.1rem;
+  background: var(--text);
+  color: #111;
+  text-decoration: none;
+  font-weight: 600;
+  border-radius: 999px;
+}
+
+.enter:hover { background: var(--orange); color: #111; }
+
+.dash-body { height: 100vh; overflow: hidden; }
+
+.dash {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.map-stage {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 0.5rem 1rem 0;
+}
+
+.us-map {
+  width: 100%;
+  height: 100%;
+}
+
+.us-map a path,
+.us-map a circle {
+  stroke: #0c100e;
+  stroke-width: 1;
+}
+
+.us-map a:hover path,
+.us-map a:focus path,
+.us-map a:hover circle,
+.us-map a:focus circle {
+  stroke: var(--green);
+  stroke-width: 2;
+}
+
+.us-map path[class*="-"],
+.us-map .separator1 {
+  fill: none;
+  stroke: #2a3a2c;
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.map-note {
+  margin: 0 0 0.35rem;
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 0.72rem;
+}
+
+.state-card {
+  position: absolute;
+  top: 0.6rem;
+  right: 1rem;
+  width: min(320px, calc(100% - 2rem));
+  background: rgba(16, 21, 15, 0.94);
+  border: 1px solid var(--line);
+  padding: 0.8rem 0.9rem;
+}
+
+.state-list {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+}
+
+.state-list a { color: var(--text); text-decoration: none; }
+.state-list a:hover { color: var(--orange); }
+.state-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.92rem;
+}
+.state-list span {
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 0.72rem;
+}
+
+.clear-state {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 0.75rem;
+}
+
+.dock {
+  position: relative;
+  padding: 0.4rem 1.25rem 1rem;
+}
+
+.dock #results {
+  position: absolute;
+  left: 1.25rem;
+  right: 1.25rem;
+  bottom: calc(100% - 0.2rem);
+  max-height: 38vh;
+  overflow: auto;
+  background: #10150f;
+  border: 1px solid var(--line);
+}
+
+.dock #results:empty,
+.dock #results:not(:has(a)):not(:has(p)) {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .state-card { position: static; width: auto; margin-top: 0.6rem; }
+  .dash-body, .dash { height: auto; min-height: 100vh; overflow: visible; }
+  .map-stage { display: block; }
+  .us-map { height: auto; }
 }

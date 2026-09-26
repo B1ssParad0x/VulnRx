@@ -22,6 +22,7 @@ use crate::error::ApiError;
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route("/", get(pages::home))
+        .route("/dashboard", get(pages::dashboard))
         .route("/search", get(pages::search_results))
         .route("/hospitals/{id}", get(pages::hospital))
         .route("/vendors/{id}", get(pages::vendor))

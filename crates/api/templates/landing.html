@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="landing-body">
+  {% include "top.html" %}
+  <main class="landing">
+    <svg class="signal" viewBox="0 0 1200 640" preserveAspectRatio="none" aria-hidden="true">
+      <path class="wave w1" d="M-20 420 C 180 300, 360 540, 600 420 S 980 280, 1220 420" />
+      <path class="wave w2" d="M-20 470 C 200 360, 400 590, 640 470 S 1000 340, 1220 470" />
+      <path class="wave w3" d="M-20 520 C 220 410, 420 640, 680 520 S 1020 400, 1220 520" />
+      <path class="wave w4" d="M-20 360 C 160 250, 340 470, 560 360 S 940 230, 1220 360" />
+    </svg>
+    <section class="landing-copy">
+      <p class="kicker">public record</p>
+      <h1>A hospital's vendors and breaches, from the records that already name them.</h1>
+      <p class="lede">Search the Medicare registry. The map shows where a linked HHS breach report exists. Nothing on this screen is inferred.</p>
+      <a class="enter" href="/dashboard">Open the map</a>
+    </section>
+  </main>
+  <script src="/static/htmx.min.js"></script>
+</body>
+</html>
