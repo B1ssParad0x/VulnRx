@@ -117,7 +117,7 @@ async fn run() -> Result<ExitCode, vulnrx_etl::IngestError> {
             let filings = vulnrx_etl::fetch_item_105_filings().await?;
             let report = vulnrx_etl::ingest_filings(&pool, &filings).await?;
             println!(
-                "sec edgar: upserted {} item 1.05 filings ({} with an excerpt), linked {} hospitals and {} vendors",
+                "sec edgar: upserted {} cybersecurity filings ({} with an excerpt), linked {} hospitals and {} vendors",
                 report.filings, report.with_summary, report.linked_hospitals, report.linked_vendors
             );
             Ok(ExitCode::SUCCESS)
@@ -242,7 +242,7 @@ fn usage() -> String {
      expand-cehrt asks CHPL which products are inside those bundle ids. It requires CHPL_API_KEY.\n\
      breaches reads the HHS OCR breach portal and links a row to a hospital only when the name and state match one facility.\n\
      kev loads the CISA known-exploited catalog, FIRST.org EPSS, and NVD CVSS. A product is linked only when the catalog's vendor and product names match one stored product.\n\
-     edgar loads 8-K Item 1.05 cybersecurity incident reports. The summary is an excerpt of the filing. SEC requires a contact in the user agent; set SEC_USER_AGENT if the default is rejected.\n\
+     edgar loads 8-K Item 1.05 incident reports since December 2023 and 10-K Item 1C cybersecurity disclosures filed from 2024 onward for hospital, nursing, health-plan, and medical-device industries. The summary is an excerpt of the filing. SEC requires a contact in the user agent; set SEC_USER_AGENT if the default is rejected.\n\
      With no command, pi is used."
         .to_string()
 }

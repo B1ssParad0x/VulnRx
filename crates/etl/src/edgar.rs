@@ -10,6 +10,9 @@ pub const EDGAR_SEARCH_URL: &str = "https://efts.sec.gov/LATEST/search-index";
 pub const EDGAR_SOURCE: &str = "sec_edgar";
 
 const PAGE_SIZE: usize = 100;
+const HEALTH_SICS: &[&str] = &[
+    "8062", "8063", "8069", "8051", "6324", "8093", "3841", "3845", "5047",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EdgarFiling {
@@ -28,28 +31,84 @@ pub struct EdgarReport {
     pub linked_vendors: i64,
 }
 
-/// Material cybersecurity incident reports (8-K Item 1.05) since the rule took effect.
+/// Item 1.05 incident reports since December 2023, plus 2024-current 10-K Item 1C
+/// cybersecurity disclosures for hospital, nursing, health-plan, and device industries.
 pub async fn fetch_item_105_filings() -> Result<Vec<EdgarFiling>, IngestError> {
     let client = sec_client()?;
+    let end = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let mut filings =
+        fetch_pages(&client, "\"Item 1.05\"", "8-K", "2023-12-18", &end, None).await?;
+    let mut missed = Vec::new();
+    for sic in HEALTH_SICS {
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        let annual = fetch_pages(
+            &client,
+            "\"Item 1C. Cybersecurity\"",
+            "10-K",
+            "2024-01-01",
+            &end,
+            Some(sic),
+        )
+        .await?;
+        eprintln!("sec sic {sic}: {} 10-K Item 1C filings", annual.len());
+        if annual.is_empty() {
+            missed.push(*sic);
+        }
+        filings.extend(annual);
+    }
+    if !missed.is_empty() {
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        for sic in missed {
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            let annual = fetch_pages(
+                &client,
+                "\"Item 1C. Cybersecurity\"",
+                "10-K",
+                "2024-01-01",
+                &end,
+                Some(sic),
+            )
+            .await?;
+            eprintln!("sec sic {sic} retry: {} 10-K Item 1C filings", annual.len());
+            filings.extend(annual);
+        }
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    filings.retain(|filing| seen.insert(filing.source_url.clone()));
+    for filing in &mut filings {
+        tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+        let needle = if filing.filing_type.contains("1.05") {
+            "item 1.05"
+        } else {
+            "item 1c"
+        };
+        filing.summary = match client.get(&filing.source_url).send().await {
+            Ok(response) if response.status().is_success() => response
+                .text()
+                .await
+                .ok()
+                .and_then(|html| excerpt_around(&html, needle)),
+            _ => None,
+        };
+    }
+    Ok(filings)
+}
+
+async fn fetch_pages(
+    client: &reqwest::Client,
+    query: &str,
+    forms: &str,
+    start: &str,
+    end: &str,
+    sic: Option<&str>,
+) -> Result<Vec<EdgarFiling>, IngestError> {
     let mut filings = Vec::new();
     let mut from = 0_usize;
     loop {
         if from > 0 {
             tokio::time::sleep(std::time::Duration::from_millis(150)).await;
         }
-        let url = format!(
-            "{EDGAR_SEARCH_URL}?q=%22Item%201.05%22&forms=8-K&dateRange=custom&startdt=2023-12-18&enddt={}&from={from}",
-            chrono::Utc::now().format("%Y-%m-%d")
-        );
-        let response = client.get(&url).send().await?;
-        if !response.status().is_success() {
-            return Err(IngestError::HttpStatus {
-                url,
-                status: response.status().as_u16(),
-            });
-        }
-        let body = response.bytes().await?;
-        let page = parse_search(&body)?;
+        let page = search_page(client, query, forms, start, end, sic, from).await?;
         let total = page.total;
         if page.filings.is_empty() {
             break;
@@ -61,24 +120,75 @@ pub async fn fetch_item_105_filings() -> Result<Vec<EdgarFiling>, IngestError> {
             break;
         }
     }
-    for filing in &mut filings {
-        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-        filing.summary = match client.get(&filing.source_url).send().await {
-            Ok(response) if response.status().is_success() => response
-                .text()
-                .await
-                .ok()
-                .and_then(|html| excerpt_item_105(&html)),
-            _ => None,
-        };
-    }
     Ok(filings)
+}
+
+async fn search_page(
+    client: &reqwest::Client,
+    query: &str,
+    forms: &str,
+    start: &str,
+    end: &str,
+    sic: Option<&str>,
+    from: usize,
+) -> Result<SearchPage, IngestError> {
+    for attempt in 0..6 {
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+        let mut url = format!(
+            "{EDGAR_SEARCH_URL}?q={}&forms={forms}&dateRange=custom&startdt={start}&enddt={end}&from={from}",
+            encode_query(query)
+        );
+        if let Some(sic) = sic {
+            url.push_str("&sics=");
+            url.push_str(sic);
+        }
+        let response = client.get(&url).send().await?;
+        if !response.status().is_success() {
+            return Err(IngestError::HttpStatus {
+                url,
+                status: response.status().as_u16(),
+            });
+        }
+        let page = parse_search(&response.bytes().await?)?;
+        let sic_ok = sic.is_none_or(|wanted| {
+            page.sample_sics.iter().any(|found| found == wanted) || page.total == 0
+        });
+        if sic_ok {
+            return Ok(page);
+        }
+    }
+    if let Some(sic) = sic {
+        eprintln!("sec sic {sic} did not match the catalog filter; skipped");
+    }
+    Ok(SearchPage {
+        total: 0,
+        filings: Vec::new(),
+        sample_sics: Vec::new(),
+    })
+}
+
+fn encode_query(query: &str) -> String {
+    let mut out = String::new();
+    for byte in query.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => out.push(byte as char),
+            b' ' => out.push('+'),
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
 }
 
 pub fn parse_search(body: &[u8]) -> Result<SearchPage, IngestError> {
     let parsed: SearchResponse = serde_json::from_slice(body)?;
     let mut filings = Vec::new();
+    let mut sample_sics = Vec::new();
     for hit in parsed.hits.hits {
+        if sample_sics.is_empty() {
+            sample_sics = hit.source.sics.clone();
+        }
         let Some(filing) = filing_from_hit(hit) else {
             continue;
         };
@@ -87,10 +197,11 @@ pub fn parse_search(body: &[u8]) -> Result<SearchPage, IngestError> {
     Ok(SearchPage {
         total: parsed.hits.total.value,
         filings,
+        sample_sics,
     })
 }
 
-pub fn excerpt_item_105(html: &str) -> Option<String> {
+pub fn excerpt_around(html: &str, needle: &str) -> Option<String> {
     let document = Html::parse_document(html);
     let selector = Selector::parse("body").expect("body selector");
     let text = document
@@ -100,7 +211,7 @@ pub fn excerpt_item_105(html: &str) -> Option<String> {
         .unwrap_or_default();
     let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
     let lower = collapsed.to_ascii_lowercase();
-    let start = lower.find("item 1.05")?;
+    let start = lower.find(needle)?;
     let excerpt: String = collapsed[start..].chars().take(480).collect();
     let excerpt = excerpt.split_whitespace().collect::<Vec<_>>().join(" ");
     if excerpt.len() < 40 {
@@ -205,6 +316,7 @@ pub async fn ingest_filings(
 pub struct SearchPage {
     pub total: usize,
     pub filings: Vec<EdgarFiling>,
+    pub sample_sics: Vec<String>,
 }
 
 fn filing_from_hit(hit: SearchHit) -> Option<EdgarFiling> {
@@ -219,6 +331,8 @@ fn filing_from_hit(hit: SearchHit) -> Option<EdgarFiling> {
     let source_url = filing_url(&cik, &source.adsh, filename);
     let filing_type = if source.items.iter().any(|item| item == "1.05") {
         "8-K Item 1.05".to_string()
+    } else if source.form.starts_with("10-K") {
+        "10-K Item 1C".to_string()
     } else {
         source.form
     };
@@ -289,6 +403,8 @@ struct HitSource {
     adsh: String,
     #[serde(default)]
     items: Vec<String>,
+    #[serde(default)]
+    sics: Vec<String>,
 }
 
 const CREATE_STAGE: &str = r#"
@@ -361,7 +477,7 @@ WHERE filing.source = $1
 
 #[cfg(test)]
 mod tests {
-    use super::{excerpt_item_105, parse_search};
+    use super::{excerpt_around, parse_search};
 
     #[test]
     fn parses_an_item_105_hit_into_an_archives_url() {
@@ -393,9 +509,33 @@ mod tests {
     }
 
     #[test]
+    fn labels_a_10k_cybersecurity_item() {
+        let body = br#"{
+          "hits": {
+            "total": {"value": 1, "relation": "eq"},
+            "hits": [{
+              "_id": "0000860730-26-000010:hca10k.htm",
+              "_source": {
+                "ciks": ["0000860730"],
+                "display_names": ["HCA Healthcare, Inc.  (HCA)  (CIK 0000860730)"],
+                "file_date": "2026-02-10",
+                "form": "10-K",
+                "adsh": "0000860730-26-000010",
+                "sics": ["8062"]
+              }
+            }]
+          }
+        }"#;
+        let page = parse_search(body).unwrap();
+        assert_eq!(page.filings[0].filing_type, "10-K Item 1C");
+        assert_eq!(page.filings[0].company_name, "HCA Healthcare, Inc.");
+        assert_eq!(page.sample_sics, vec!["8062".to_string()]);
+    }
+
+    #[test]
     fn excerpt_starts_at_item_105() {
         let html = "<html><body><p>Intro</p><p>Item 1.05 Material Cybersecurity Incidents. The company experienced an event.</p></body></html>";
-        let excerpt = excerpt_item_105(html).unwrap();
+        let excerpt = excerpt_around(html, "item 1.05").unwrap();
         assert!(excerpt.starts_with("Item 1.05"));
         assert!(excerpt.contains("experienced an event"));
     }
