@@ -1,1 +1,6 @@
 /temp
+/target
+**/*.rs.bk
+.env
+.env.*
+!.env.example
