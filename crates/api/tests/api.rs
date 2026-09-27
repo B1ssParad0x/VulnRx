@@ -152,7 +152,14 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
     assert!(dash.body.contains("linked HHS OCR breach"));
     let alabama = call_text(&pool, "/dashboard?state=AL").await;
     assert!(alabama.body.contains("Alabama"));
+    assert!(alabama.body.contains("1 hospital"));
+    assert!(alabama.body.contains("1 with a linked breach"));
     assert!(alabama.body.contains("SOUTHEAST HEALTH MEDICAL CENTER"));
+    assert!(alabama.body.contains("1 linked breach · Example EHR"));
+    let alaska = call_text(&pool, "/dashboard?state=AK").await;
+    assert!(alaska.body.contains("ALASKA NATIVE MEDICAL CENTER"));
+    assert!(alaska.body.contains("0 with a linked breach"));
+    assert!(alaska.body.contains("no linked breach · no certified product"));
     let typed = call_text(&pool, "/dashboard?q=south").await;
     assert!(typed.body.contains("SOUTHEAST HEALTH MEDICAL CENTER"));
     let fragment = call_text(&pool, "/search?q=south").await;
@@ -277,6 +284,7 @@ async fn seed(pool: &sqlx::PgPool) {
     sqlx::query(
         "INSERT INTO hospitals (ccn, name, state, aliases) VALUES
             ('010001', 'SOUTHEAST HEALTH MEDICAL CENTER', 'AL', ARRAY['Southeast Regional']),
+            ('020001', 'ALASKA NATIVE MEDICAL CENTER', 'AK', '{}'),
             (NULL, 'COUNTY HOSPITAL', 'MO', '{}'),
             (NULL, '100% MEMORIAL', 'TX', '{}'),
             (NULL, '0 GENERAL', 'TX', '{}')",

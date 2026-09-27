@@ -19,7 +19,7 @@
         <p class="kicker">{{ selected_name }}</p>
         <p>{{ hospital_count }} in the registry. {{ breach_count }} with a linked breach.</p>
         {% if state_hospitals.is_empty() %}
-        <p class="empty">No linked breach in this state.</p>
+        <p class="empty">No hospital in this registry.</p>
         {% else %}
         <ul class="state-list">
           {% for row in state_hospitals %}

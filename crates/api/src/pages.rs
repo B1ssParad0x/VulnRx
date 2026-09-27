@@ -195,8 +195,10 @@ struct StateCountRow {
 struct StateHospitalRow {
     id: Uuid,
     name: String,
+    display_name: Option<String>,
     city: Option<String>,
     breaches: i64,
+    vendors: Vec<String>,
 }
 
 pub(crate) async fn home(State(pool): State<PgPool>) -> Result<Response, ApiError> {
@@ -229,10 +231,10 @@ pub(crate) async fn dashboard(
     {
         Some(code) => {
             let stats = counts.get(code).copied().unwrap_or((0, 0));
-            let rows = state_breach_hospitals(&pool, code).await?;
+            let rows = state_hospitals(&pool, code).await?;
             (
                 state_name(code).to_string(),
-                format!("{} hospitals", grouped(stats.0)),
+                hospitals_label(stats.0),
                 grouped(stats.1),
                 rows,
             )
@@ -573,44 +575,69 @@ async fn state_counts(pool: &PgPool) -> Result<HashMap<String, (i64, i64)>, ApiE
         .collect())
 }
 
-async fn state_breach_hospitals(
-    pool: &PgPool,
-    state: &str,
-) -> Result<Vec<StateHospital>, ApiError> {
-    let rows = sqlx::query_as::<_, StateHospitalRow>(
-        "SELECT h.id, h.name, h.city, COUNT(b.id)::bigint AS breaches
-         FROM hospitals h
-         JOIN breach_events b ON b.hospital_id = h.id
-         WHERE h.state = $1
-         GROUP BY h.id, h.name, h.city
-         ORDER BY breaches DESC, h.name
-         LIMIT 12",
-    )
-    .bind(state)
-    .fetch_all(pool)
-    .await?;
+async fn state_hospitals(pool: &PgPool, state: &str) -> Result<Vec<StateHospital>, ApiError> {
+    let rows = sqlx::query_as::<_, StateHospitalRow>(STATE_HOSPITALS_SQL)
+        .bind(state)
+        .fetch_all(pool)
+        .await?;
     Ok(rows
         .into_iter()
         .map(|row| {
-            let place = row.city.unwrap_or_default();
-            let breaches = if row.breaches == 1 {
-                "1 linked breach".to_string()
-            } else {
-                format!("{} linked breaches", grouped(row.breaches))
+            let breach = match row.breaches {
+                0 => "no linked breach".to_string(),
+                1 => "1 linked breach".to_string(),
+                n => format!("{} linked breaches", grouped(n)),
             };
-            let meta = if place.is_empty() {
-                breaches
-            } else {
-                format!("{place} · {breaches}")
-            };
+            let vendors = vendor_stack(&row.vendors);
+            let mut meta = format!("{breach} · {vendors}");
+            if let Some(city) = row.city.filter(|city| !city.trim().is_empty()) {
+                meta = format!("{city} · {meta}");
+            }
             StateHospital {
                 id: row.id,
-                name: row.name,
+                name: crate::public_name(&row.name, row.display_name.as_deref()).to_string(),
                 meta,
             }
         })
         .collect())
 }
+
+fn hospitals_label(count: i64) -> String {
+    if count == 1 {
+        "1 hospital".to_string()
+    } else {
+        format!("{} hospitals", grouped(count))
+    }
+}
+
+fn vendor_stack(vendors: &[String]) -> String {
+    match vendors {
+        [] => "no certified product".to_string(),
+        [one] => one.clone(),
+        [first, second] => format!("{first}, {second}"),
+        many => format!("{}, {} · {} vendors", many[0], many[1], many.len()),
+    }
+}
+
+const STATE_HOSPITALS_SQL: &str = "SELECT h.id, h.name, h.display_name, h.city,
+        COUNT(DISTINCT b.id)::bigint AS breaches,
+        COALESCE((
+            SELECT ARRAY(
+                SELECT v.name
+                FROM (
+                    SELECT DISTINCT vendor.name
+                    FROM hospital_vendor_map m
+                    JOIN vendors vendor ON vendor.id = m.vendor_id
+                    WHERE m.hospital_id = h.id
+                ) v(name)
+                ORDER BY v.name
+            )
+        ), '{}') AS vendors
+ FROM hospitals h
+ LEFT JOIN breach_events b ON b.hospital_id = h.id
+ WHERE h.state = $1
+ GROUP BY h.id, h.name, h.display_name, h.city
+ ORDER BY breaches DESC, h.name";
 
 fn map_style(counts: &HashMap<String, (i64, i64)>, selected: Option<&str>) -> String {
     let mut css = String::new();

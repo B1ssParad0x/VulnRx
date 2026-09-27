@@ -488,7 +488,9 @@ footer {
   position: absolute;
   top: 0.6rem;
   right: 1rem;
-  width: min(320px, calc(100% - 2rem));
+  width: min(340px, calc(100% - 2rem));
+  max-height: calc(100% - 1.2rem);
+  overflow: auto;
   background: rgba(16, 21, 15, 0.94);
   border: 1px solid var(--line);
   padding: 0.8rem 0.9rem;
@@ -503,10 +505,9 @@ footer {
 .state-list a { color: var(--text); text-decoration: none; }
 .state-list a:hover { color: var(--orange); }
 .state-list li {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.6rem;
-  padding: 0.35rem 0;
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.4rem 0;
   border-bottom: 1px solid var(--line);
   font-size: 0.92rem;
 }
