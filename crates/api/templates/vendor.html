@@ -28,6 +28,52 @@
       {% endif %}
     </section>
     <section class="stack">
+      <h2>Vulnerabilities</h2>
+      {% if cves.is_empty() %}
+      <p class="empty">No CVE record names a product from this vendor.</p>
+      {% else %}
+      <ul class="cves">
+        {% for cve in cves %}
+        <li class="panel">
+          <p class="row-title">{{ cve.cve_id }}{% if cve.kev %} <em class="kev">KEV</em>{% endif %}</p>
+          <p class="meta">{{ cve.product }}</p>
+          {% if cve.scores != "" %}<p class="meta">{{ cve.scores }}</p>{% endif %}
+          {% if cve.source_href != "" %}
+          <p class="meta"><a href="{{ cve.source_href }}">{{ cve.source_label }}</a></p>
+          {% endif %}
+          {% if cve.description != "" %}<p>{{ cve.description }}</p>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+    <section class="stack">
+      <h2>Breaches</h2>
+      {% if breaches.is_empty() %}
+      <p class="empty">No breach record names this vendor.</p>
+      {% else %}
+      <ol class="timeline">
+        {% for row in breaches %}
+        <li>
+          <p class="when">{{ row.when }}</p>
+          <div>
+            <p class="kind">{{ row.kind }}</p>
+            <p class="row-title">{{ row.title }}</p>
+            {% if row.body != "" %}<p>{{ row.body }}</p>{% endif %}
+            <p class="meta">
+              {% if row.source_href != "" %}
+              <a href="{{ row.source_href }}">{{ row.source_label }}</a>
+              {% else %}
+              {{ row.source_label }}
+              {% endif %}
+            </p>
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+      {% endif %}
+    </section>
+    <section class="stack">
       <h2>Hospitals</h2>
       {% if hospitals.is_empty() %}
       <p class="empty">No hospital is linked to this vendor.</p>

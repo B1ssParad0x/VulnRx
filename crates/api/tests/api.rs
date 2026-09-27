@@ -187,6 +187,8 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
     let vendor_page = call_text(&pool, &format!("/vendors/{vendor_id}")).await;
     assert!(vendor_page.body.contains("Example EHR"));
     assert!(vendor_page.body.contains("SOUTHEAST HEALTH MEDICAL CENTER"));
+    assert!(vendor_page.body.contains("CVE-2024-12345"));
+    assert!(vendor_page.body.contains("No breach record names this vendor."));
     assert!(!page.body.contains("NetScaler"));
 
     let kev_page = call_text(&pool, "/kev").await;

@@ -97,6 +97,8 @@ struct VendorPage {
     name: String,
     summary: String,
     products: Vec<String>,
+    cves: Vec<CveRow>,
+    breaches: Vec<TimelineRow>,
     hospitals: Vec<VendorHospitalRow>,
 }
 
@@ -415,20 +417,7 @@ pub(crate) async fn hospital(
                 vulns
                     .vulnerabilities
                     .iter()
-                    .map(|cve| CveRow {
-                        explanation: saved
-                            .iter()
-                            .find(|(id, _)| id == &cve.cve_id)
-                            .map(|(_, text)| text.clone())
-                            .unwrap_or_default(),
-                        cve_id: cve.cve_id.clone(),
-                        kev: cve.is_kev == Some(true),
-                        product: format!("{} · {}", cve.vendor_name, cve.product_name),
-                        scores: cve_scores(cve),
-                        description: cve.description.clone().unwrap_or_default(),
-                        source_href: safe_href(cve.source_url.as_deref()).unwrap_or("").to_string(),
-                        source_label: notice_label(cve.match_basis.as_deref()).to_string(),
-                    })
+                    .map(|cve| present_cve(cve, &saved))
                     .collect()
             },
             exposures: {
@@ -493,6 +482,20 @@ pub(crate) async fn vendor(
                     line
                 })
                 .collect(),
+            cves: {
+                let ids: Vec<String> = vendor
+                    .vulnerabilities
+                    .iter()
+                    .map(|cve| cve.cve_id.clone())
+                    .collect();
+                let saved = crate::explain::cached_for(&pool, &ids).await?;
+                vendor
+                    .vulnerabilities
+                    .iter()
+                    .map(|cve| present_cve(cve, &saved))
+                    .collect()
+            },
+            breaches: vendor.breaches.iter().map(vendor_breach).collect(),
             hospitals: vendor
                 .hospitals
                 .iter()
@@ -1001,11 +1004,62 @@ fn product_line(name: Option<&str>, version: Option<&str>) -> String {
 }
 
 fn vendor_meta(link: &hospitals::VendorLink) -> String {
-    format!(
-        "{} · confidence {}",
-        source_label(&link.source),
-        link.confidence
-    )
+    let mut parts = Vec::new();
+    if let Some(category) = link.category.as_deref().filter(|value| !value.is_empty()) {
+        parts.push(category_label(category).to_string());
+    }
+    parts.push(source_label(&link.source).to_string());
+    parts.push(format!("confidence {}", link.confidence));
+    parts.join(" · ")
+}
+
+fn category_label(value: &str) -> &str {
+    match value {
+        "ehr" => "EHR",
+        "imaging" => "imaging",
+        "cloud" => "cloud",
+        "networking" => "networking",
+        "device" => "device",
+        "other" => "other",
+        other => other,
+    }
+}
+
+fn present_cve(cve: &hospitals::Vulnerability, saved: &[(String, String)]) -> CveRow {
+    CveRow {
+        explanation: saved
+            .iter()
+            .find(|(id, _)| id == &cve.cve_id)
+            .map(|(_, text)| text.clone())
+            .unwrap_or_default(),
+        cve_id: cve.cve_id.clone(),
+        kev: cve.is_kev == Some(true),
+        product: format!("{} · {}", cve.vendor_name, cve.product_name),
+        scores: cve_scores(cve),
+        description: cve.description.clone().unwrap_or_default(),
+        source_href: safe_href(cve.source_url.as_deref()).unwrap_or("").to_string(),
+        source_label: notice_label(cve.match_basis.as_deref()).to_string(),
+    }
+}
+
+fn vendor_breach(row: &vulnrx_models::BreachEvent) -> TimelineRow {
+    let mut body = Vec::new();
+    if let Some(kind) = row.breach_type.as_deref() {
+        body.push(kind.to_string());
+    }
+    if let Some(count) = row.individuals_affected {
+        body.push(format!("{} people", grouped(i64::from(count))));
+    }
+    TimelineRow {
+        when: date_text(row.date_reported),
+        kind: "breach".to_string(),
+        title: row.entity_name.clone(),
+        body: body.join(" · "),
+        source_label: source_label(&row.source).to_string(),
+        source_href: safe_href(row.source_url.as_deref())
+            .unwrap_or_default()
+            .to_string(),
+    }
 }
 
 fn location(address: Option<&str>, city: Option<&str>, state: Option<&str>, zip: Option<&str>) -> String {
