@@ -114,8 +114,12 @@ async fn run() -> Result<ExitCode, vulnrx_etl::IngestError> {
             );
             Ok(ExitCode::SUCCESS)
         }
-        Command::ExpandCehrt => {
-            let report = vulnrx_etl::expand_cehrt(&pool).await?;
+        Command::ExpandCehrt { missing } => {
+            let report = if missing {
+                vulnrx_etl::expand_missing_cehrt(&pool).await?
+            } else {
+                vulnrx_etl::expand_cehrt(&pool).await?
+            };
             println!(
                 "CHPL bundles: {} looked up, {} failed; upserted {} vendors, {} products, {} links",
                 report.bundles,
@@ -285,7 +289,7 @@ enum Command {
         state: Option<String>,
         url: Option<String>,
     },
-    ExpandCehrt,
+    ExpandCehrt { missing: bool },
     Breaches {
         state: Option<String>,
     },
@@ -385,12 +389,14 @@ fn parse_args() -> Result<Command, String> {
     let mut url = None;
     let mut limit = None;
     let mut sic = None;
+    let mut missing = false;
     let mut rest = raw.into_iter();
     while let Some(arg) = rest.next() {
         match arg.as_str() {
             "--state" => state = Some(rest.next().ok_or_else(usage)?),
             "--url" => url = Some(rest.next().ok_or_else(usage)?),
             "--sic" => sic = Some(rest.next().ok_or_else(usage)?),
+            "--missing" => missing = true,
             "--limit" => {
                 let raw_limit = rest.next().ok_or_else(usage)?;
                 limit = Some(
@@ -403,6 +409,9 @@ fn parse_args() -> Result<Command, String> {
         }
     }
     if sic.is_some() && kind != "edgar" {
+        return Err(usage());
+    }
+    if missing && kind != "expand-cehrt" {
         return Err(usage());
     }
     Ok(match kind {
@@ -422,7 +431,7 @@ fn parse_args() -> Result<Command, String> {
             if state.is_some() || url.is_some() || limit.is_some() {
                 return Err(usage());
             }
-            Command::ExpandCehrt
+            Command::ExpandCehrt { missing }
         }
         "breaches" => {
             if url.is_some() || limit.is_some() {
@@ -516,7 +525,7 @@ fn usage() -> String {
      vulnrx-etl pi [--state XX] [--url CSV_URL]\n\
      vulnrx-etl hospitals [--state XX] [--url CSV_URL]\n\
      vulnrx-etl pi-2024 [--state XX] [--url CSV_URL]\n\
-     vulnrx-etl expand-cehrt\n\
+     vulnrx-etl expand-cehrt [--missing]\n\
      vulnrx-etl breaches [--state XX]\n\
      vulnrx-etl kev\n\
      vulnrx-etl edgar [--sic 8062]\n\
@@ -534,7 +543,7 @@ fn usage() -> String {
      pi loads the 2023 ONC file that already joins hospitals to CHPL products.\n\
      hospitals loads every Medicare-registered hospital. It does not invent vendor links.\n\
      pi-2024 stores the 2024 certified-product bundle id reported by each hospital.\n\
-     expand-cehrt asks CHPL which products are inside those bundle ids. It requires CHPL_API_KEY.\n\
+     expand-cehrt asks CHPL which products are inside those bundle ids. --missing retries only ids that still have no product link. A 404 stays unlinked. It requires CHPL_API_KEY.\n\
      breaches reads the HHS OCR breach portal and links a row to a hospital only when the name and state match one facility.\n\
      kev loads the CISA known-exploited catalog, FIRST.org EPSS, and NVD CVSS. A product is linked only when the catalog's vendor and product names match one stored product.\n\
      edgar loads 8-K Item 1.05 incident reports since December 2023 and 10-K Item 1C cybersecurity disclosures filed from 2024 onward for hospital, nursing, health-plan, and medical-device industries. The summary is an excerpt of the filing. --sic loads one industry code and keeps the page only when EDGAR's result carries that code. SEC requires a contact in the user agent; set SEC_USER_AGENT if the default is rejected.\n\

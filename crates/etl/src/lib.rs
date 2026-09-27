@@ -19,7 +19,9 @@ pub use certs::query_fallback;
 pub use breaches::{
     BREACH_PORTAL_URL, BreachRecord, BreachReport, fetch_breach_portal, ingest_breaches,
 };
-pub use chpl::{BundleProduct, CehrtBundle, ExpandReport, expand_cehrt, link_cehrt_bundles};
+pub use chpl::{
+    BundleProduct, CehrtBundle, ExpandReport, expand_cehrt, expand_missing_cehrt, link_cehrt_bundles,
+};
 pub use cve_list::{CveListReport, match_cve_list};
 pub use cve_match::{CveMatchReport, match_product_cves};
 pub use edgar::{

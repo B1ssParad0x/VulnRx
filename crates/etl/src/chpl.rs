@@ -35,17 +35,43 @@ pub struct ExpandReport {
 
 /// Look up every stored 2024 CEHRT id and write the products CHPL returns.
 pub async fn expand_cehrt(pool: &PgPool) -> Result<ExpandReport, IngestError> {
+    let ids: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT cehrt_id FROM cehrt_reports WHERE source = $1 ORDER BY cehrt_id",
+    )
+    .bind(PI_2024_SOURCE)
+    .fetch_all(pool)
+    .await?;
+    lookup_bundles(pool, &ids).await
+}
+
+/// Second lookup for bundle ids that still have no product link. A 404 stays unlinked.
+pub async fn expand_missing_cehrt(pool: &PgPool) -> Result<ExpandReport, IngestError> {
+    let ids: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT r.cehrt_id
+         FROM cehrt_reports r
+         WHERE r.source = $1
+           AND NOT EXISTS (
+               SELECT 1
+               FROM hospital_vendor_map m
+               WHERE m.source = $2
+                 AND m.source_url = 'https://chpl.healthit.gov/rest/certification_ids/' || r.cehrt_id
+           )
+         ORDER BY r.cehrt_id",
+    )
+    .bind(PI_2024_SOURCE)
+    .bind(CEHRT_LINK_SOURCE)
+    .fetch_all(pool)
+    .await?;
+    lookup_bundles(pool, &ids).await
+}
+
+async fn lookup_bundles(pool: &PgPool, ids: &[String]) -> Result<ExpandReport, IngestError> {
     let Some(api_key) = std::env::var("CHPL_API_KEY")
         .ok()
         .filter(|key| !key.trim().is_empty())
     else {
         return Err(IngestError::MissingApiKey);
     };
-    let ids: Vec<String> =
-        sqlx::query_scalar("SELECT DISTINCT cehrt_id FROM cehrt_reports WHERE source = $1")
-            .bind(PI_2024_SOURCE)
-            .fetch_all(pool)
-            .await?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(60))
         .user_agent("vulnrx/0.1")
@@ -55,7 +81,10 @@ pub async fn expand_cehrt(pool: &PgPool) -> Result<ExpandReport, IngestError> {
     for (n, cehrt_id) in ids.iter().enumerate() {
         match fetch_bundle(&client, &api_key, cehrt_id).await {
             Ok(bundle) => bundles.push(bundle),
-            Err(IngestError::HttpStatus { status: 404, .. }) => failed_lookups += 1,
+            Err(IngestError::HttpStatus { status: 404, .. }) => {
+                eprintln!("CHPL returned 404 for {cehrt_id}");
+                failed_lookups += 1;
+            }
             Err(err) => return Err(err),
         }
         if (n + 1) % 50 == 0 {
