@@ -1,5 +1,6 @@
 //! Load public CMS and ONC files into the VulnRx store.
 
+mod advisories;
 mod breaches;
 mod chpl;
 mod cve_list;
@@ -12,6 +13,7 @@ mod load;
 mod pi2024;
 mod score;
 
+pub use advisories::{AdvisoryReport, match_advisories};
 pub use breaches::{
     BREACH_PORTAL_URL, BreachRecord, BreachReport, fetch_breach_portal, ingest_breaches,
 };

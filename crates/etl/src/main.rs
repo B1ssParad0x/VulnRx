@@ -189,6 +189,18 @@ async fn run() -> Result<ExitCode, vulnrx_etl::IngestError> {
             );
             Ok(ExitCode::SUCCESS)
         }
+        Command::Advisories => {
+            let report = vulnrx_etl::match_advisories(&pool).await?;
+            println!(
+                "cisa advisories: read {} files, skipped {}, {} products gained a list, {} cves, {} links",
+                report.advisories,
+                report.skipped,
+                report.products_with_cves,
+                report.cves,
+                report.links
+            );
+            Ok(ExitCode::SUCCESS)
+        }
         Command::CveList => {
             let report = vulnrx_etl::match_cve_list(&pool).await?;
             println!(
@@ -246,6 +258,7 @@ enum Command {
     Censys { limit: Option<i64> },
     Cve,
     CveList,
+    Advisories,
 }
 
 fn parse_args() -> Result<Command, String> {
@@ -297,6 +310,10 @@ fn parse_args() -> Result<Command, String> {
         Some("cve-list") => {
             raw.remove(0);
             "cve-list"
+        }
+        Some("advisories") => {
+            raw.remove(0);
+            "advisories"
         }
         Some("pi") => {
             raw.remove(0);
@@ -392,6 +409,12 @@ fn parse_args() -> Result<Command, String> {
             }
             Command::CveList
         }
+        "advisories" => {
+            if state.is_some() || url.is_some() || limit.is_some() {
+                return Err(usage());
+            }
+            Command::Advisories
+        }
         _ => {
             if limit.is_some() {
                 return Err(usage());
@@ -415,6 +438,7 @@ fn usage() -> String {
      vulnrx-etl censys [--limit N]\n\
      vulnrx-etl cve\n\
      vulnrx-etl cve-list\n\
+     vulnrx-etl advisories\n\
      \n\
      pi loads the 2023 ONC file that already joins hospitals to CHPL products.\n\
      hospitals loads every Medicare-registered hospital. It does not invent vendor links.\n\
@@ -427,6 +451,7 @@ fn usage() -> String {
      shodan and censys query an existing public index for stored product names. Shodan search requires a paid membership. Censys search needs CENSYS_ORGANIZATION_ID, which free accounts do not have. Default limit is 20 queries, and the maximum is 50. A hit is stored only when the result names that product. Host addresses are not stored.\n\
      cve asks NVD, using NVD_API_KEY, for vulnerabilities whose description or official CPE title contains the stored product name as an exact phrase. The CPE vendor must match the stored vendor. Requires NVD_API_KEY.\n\
      cve-list reads the CVE Project's CVE List v5 baseline. A product is linked only when the record's vendor and product fields, or its CPE, name that stored product. A placeholder such as n/a is ignored.\n\
+     advisories reads CISA CSAF files. A product is linked only when the advisory's product tree names that vendor and product and the CVE lists that product as known affected.\n\
      With no command, pi is used."
         .to_string()
 }
