@@ -20,5 +20,6 @@ serde_json = "1.0.151"
 sqlx.workspace = true
 thiserror.workspace = true
 dotenvy = "0.15"
-tokio = { workspace = true, features = ["time"] }
+tokio = { workspace = true, features = ["time", "rt"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
 vulnrx-models = { path = "../models" }
