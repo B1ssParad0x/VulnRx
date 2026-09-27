@@ -522,16 +522,30 @@ body.landing-body main.landing {
   overflow: hidden;
 }
 
+.dash-chrome {
+  flex: 0 0 auto;
+  z-index: 2;
+  background: var(--bg);
+}
+
 .map-stage {
   position: relative;
   min-height: 0;
   display: grid;
   place-items: center;
   padding: 0.5rem 1rem 0;
-  background: #0a0504;
+  background:
+    radial-gradient(120% 80% at 50% 40%, #1a0806 0%, #0a0504 55%, #070403 100%);
 }
 
-.map-stage .scanner { z-index: 0; }
+.map-stage .scanner {
+  z-index: 0;
+  opacity: 1;
+}
+
+.map-stage.has-scanner {
+  background: #090303;
+}
 
 .us-map {
   position: relative;
