@@ -3,10 +3,10 @@
 // Colors and the page wiring are this project's.
 
 (function () {
-  const stage = document.querySelector(".landing");
-  const container = document.getElementById("scanner");
-  if (!stage || !container) return;
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  document.querySelectorAll(".scanner").forEach(function (container) {
+  const stage = container.closest(".landing, .map-stage") || container;
+  const red = container.getAttribute("data-theme") === "red";
 
   const vertex = `#version 300 es
 in vec2 position;
@@ -187,13 +187,13 @@ void main() {
   gl.uniform1f(uniforms.uRipple, 0.28);
   gl.uniform1f(uniforms.uBandDensity, 6);
   gl.uniform1f(uniforms.uLineSharpness, 1.5);
-  gl.uniform1f(uniforms.uGlow, 0.55);
+  gl.uniform1f(uniforms.uGlow, red ? 0.28 : 0.55);
   gl.uniform1f(uniforms.uColorSpread, 0.45);
-  gl.uniform1f(uniforms.uBrightness, 1.35);
+  gl.uniform1f(uniforms.uBrightness, red ? 0.42 : 1.35);
   gl.uniform1f(uniforms.uContrast, 1.05);
   gl.uniform1f(uniforms.uSoftness, 1.1);
-  gl.uniform1f(uniforms.uVignette, 0.35);
-  gl.uniform1f(uniforms.uOpacity, 1);
+  gl.uniform1f(uniforms.uVignette, red ? 0.62 : 0.35);
+  gl.uniform1f(uniforms.uOpacity, red ? 0.72 : 1);
   gl.uniform1f(uniforms.uScanline, 1);
   gl.uniform1f(uniforms.uGrain, 1);
   gl.uniform1f(uniforms.uGrainIntensity, 0.04);
@@ -203,9 +203,9 @@ void main() {
   gl.uniform1f(uniforms.uMouseStrength, 0.45);
   gl.uniform1f(uniforms.uMouseActive, 0);
   gl.uniform2f(uniforms.uMouse, 0.5, 0.5);
-  gl.uniform3fv(uniforms.uColor1, hex("#9a3e10"));
-  gl.uniform3fv(uniforms.uColor2, hex("#ff6a1a"));
-  gl.uniform3fv(uniforms.uColor3, hex("#c6f54a"));
+  gl.uniform3fv(uniforms.uColor1, hex(red ? "#140403" : "#9a3e10"));
+  gl.uniform3fv(uniforms.uColor2, hex(red ? "#7a140c" : "#ff6a1a"));
+  gl.uniform3fv(uniforms.uColor3, hex(red ? "#3a0a08" : "#c6f54a"));
 
   container.appendChild(canvas);
   stage.classList.add("has-scanner");
@@ -271,7 +271,9 @@ void main() {
   }
 
   const seen = new IntersectionObserver(function (entries) {
-    visible = entries[0].isIntersecting;
+    const rect = container.getBoundingClientRect();
+    const onScreen = rect.width > 1 && rect.height > 1 && rect.bottom > 0 && rect.top < window.innerHeight;
+    visible = entries[0].isIntersecting || onScreen;
     if (visible) start();
     else stop();
   });
@@ -282,4 +284,5 @@ void main() {
     else stop();
   });
   start();
+  });
 })();

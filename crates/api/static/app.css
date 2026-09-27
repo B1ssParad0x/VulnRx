@@ -36,26 +36,19 @@ a:hover { color: var(--orange); }
 
 .bar {
   display: flex;
-  align-items: baseline;
-  gap: 1rem;
-  padding: 0.85rem 1.25rem 0.4rem;
+  align-items: center;
+  gap: 1.1rem;
+  padding: 0.85rem 1.25rem 0.55rem;
 }
 
 .mark {
+  margin-right: auto;
   color: var(--orange);
   font-family: Consolas, "Cascadia Mono", monospace;
   font-weight: 700;
   letter-spacing: 0.18em;
   text-decoration: none;
   font-size: 1.05rem;
-}
-
-.mark-sub {
-  margin: 0;
-  color: var(--muted);
-  font-family: Consolas, "Cascadia Mono", monospace;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
 }
 
 .ticker {
@@ -182,7 +175,40 @@ input[type="search"]:focus { border-bottom-color: var(--green); }
   grid-template-columns: minmax(220px, 280px) 1fr;
   gap: 1rem;
   margin-bottom: 1.5rem;
+  align-items: start;
 }
+
+#guidance:empty { display: none; }
+#guidance:not(:empty) {
+  position: relative;
+  margin: 0 0 1.5rem;
+  padding: 1rem 1.1rem 1.15rem;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  line-height: 1.45;
+}
+#guidance:not(:empty)::before,
+#guidance:not(:empty)::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--orange);
+  border-style: solid;
+}
+#guidance:not(:empty)::before {
+  top: -1px;
+  left: -1px;
+  border-width: 2px 0 0 2px;
+}
+#guidance:not(:empty)::after {
+  right: -1px;
+  bottom: -1px;
+  border-width: 0 2px 2px 0;
+}
+#guidance .note { margin: 0 0 0.55rem; }
+#guidance p { margin: 0; }
 
 .panel {
   position: relative;
@@ -374,15 +400,31 @@ footer {
   text-decoration: none;
 }
 
-main.landing {
+body.landing-body {
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body.landing-body .bar,
+body.landing-body .ticker {
+  flex: 0 0 auto;
+}
+
+body.landing-body main.landing {
   position: relative;
+  flex: 1 1 0;
   width: 100%;
   max-width: none;
   margin: 0;
-  min-height: calc(100vh - 7rem);
+  min-height: 0;
   display: grid;
   place-items: center;
-  padding: 2rem 1.25rem 4rem;
+  padding: 2rem 1.25rem;
   overflow: hidden;
 }
 
@@ -430,6 +472,10 @@ main.landing {
   position: relative;
   z-index: 1;
   width: min(740px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .landing-copy::before {
@@ -482,9 +528,14 @@ main.landing {
   display: grid;
   place-items: center;
   padding: 0.5rem 1rem 0;
+  background: #0a0504;
 }
 
+.map-stage .scanner { z-index: 0; }
+
 .us-map {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
 }
@@ -532,6 +583,7 @@ main.landing {
 
 .state-card {
   position: absolute;
+  z-index: 2;
   top: 0.6rem;
   right: 1rem;
   width: min(340px, calc(100% - 2rem));
@@ -568,6 +620,88 @@ main.landing {
   font-size: 0.75rem;
 }
 
+.map-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 0.55rem 0.85rem;
+  align-items: end;
+  padding: 0.7rem 1.25rem 0.85rem;
+  background: linear-gradient(180deg, rgba(10, 8, 7, 0.96), rgba(7, 8, 6, 0.98));
+  border-top: 1px solid var(--orange-dim);
+}
+
+.map-controls .dock,
+.map-controls .ask {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.map-controls .field-label {
+  margin: 0;
+  color: var(--orange);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.map-controls .map-note,
+.map-controls #answer {
+  grid-column: 1 / -1;
+  padding: 0;
+}
+
+.map-controls .field {
+  display: flex;
+  align-items: stretch;
+  min-height: 2.7rem;
+  background: #0d110c;
+  border: 1px solid var(--line);
+  border-bottom: 2px solid var(--orange);
+}
+
+.map-controls .field:focus-within {
+  border-color: var(--orange-dim);
+  border-bottom-color: var(--green);
+}
+
+.map-controls input[type="search"],
+.map-controls .ask input {
+  flex: 1;
+  width: 100%;
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  border-bottom: 0;
+  font: 1rem "Segoe UI", sans-serif;
+  outline: none;
+}
+
+.map-controls .ask button {
+  flex: 0 0 auto;
+  align-self: stretch;
+  margin: 0;
+  padding: 0 1rem;
+  background: transparent;
+  color: var(--orange);
+  border: 0;
+  border-left: 1px solid var(--line);
+  cursor: pointer;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.map-controls .ask button:hover {
+  background: rgba(255, 106, 26, 0.12);
+  color: var(--green);
+}
+
 .ask {
   display: flex;
   gap: 0.5rem;
@@ -590,6 +724,14 @@ main.landing {
   letter-spacing: 0.06em;
 }
 #answer { padding: 0 1.25rem; }
+.map-controls #answer:not(:empty) {
+  margin-top: 0.15rem;
+  padding: 0.65rem 0.8rem;
+  background: #10150f;
+  border: 1px solid var(--line);
+  color: var(--text);
+  line-height: 1.4;
+}
 
 .dock {
   position: relative;
@@ -598,13 +740,14 @@ main.landing {
 
 .dock #results {
   position: absolute;
-  left: 1.25rem;
-  right: 1.25rem;
-  bottom: calc(100% - 0.2rem);
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 0.2rem);
   max-height: 38vh;
   overflow: auto;
   background: #10150f;
   border: 1px solid var(--line);
+  z-index: 3;
 }
 
 .dock #results:empty,
@@ -617,4 +760,5 @@ main.landing {
   .dash-body, .dash { height: auto; min-height: 100vh; overflow: visible; }
   .map-stage { display: block; }
   .us-map { height: auto; }
+  .map-controls { grid-template-columns: 1fr; }
 }

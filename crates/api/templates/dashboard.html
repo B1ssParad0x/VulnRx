@@ -10,6 +10,7 @@
   <div class="dash">
     {% include "top.html" %}
     <div class="map-stage">
+      <div class="scanner" data-theme="red" aria-hidden="true"></div>
       <svg class="us-map" viewBox="0 0 959 593" role="img" aria-label="United States. Fill shows hospitals with a linked breach. A green outline means the state is in the registry and has no linked breach. A green dot is a hospital whose certified product is named in a CVE record.">
         <style>{{ map_style|safe }}</style>
         {% include "us_map.html" %}
@@ -38,22 +39,31 @@
       </aside>
       {% endif %}
     </div>
-    <form class="ask" action="/ask" method="post" hx-post="/ask" hx-target="#answer" hx-swap="innerHTML">
-      <label class="sr" for="ask">Ask the records</label>
-      <input id="ask" name="q" type="text" maxlength="180" placeholder="Ask the records about a hospital" autocomplete="off">
-      <button type="submit">Ask</button>
-    </form>
-    <div id="answer"></div>
-    <form class="dock" action="/dashboard" method="get" role="search">
+    <div class="map-controls">
+      <form class="dock" action="/dashboard" method="get" role="search">
+        {% if selected != "" %}<input type="hidden" name="state" value="{{ selected }}">{% endif %}
+        <p class="field-label" id="q-label">Find a hospital</p>
+        <label class="sr" for="q">Hospital name or CCN</label>
+        <div id="results">
+          {% include "results.html" %}
+        </div>
+        <div class="field">
+          <input id="q" type="search" name="q" value="{{ query }}" placeholder="Name or CCN" autocomplete="off" aria-labelledby="q-label" hx-get="/search" hx-trigger="keyup changed delay:200ms" hx-target="#results" hx-sync="this:replace">
+        </div>
+      </form>
+      <form class="ask" action="/ask" method="post" hx-post="/ask" hx-target="#answer" hx-swap="innerHTML">
+        <p class="field-label" id="ask-label">Ask the records</p>
+        <label class="sr" for="ask">Ask the records</label>
+        <div class="field">
+          <input id="ask" name="q" type="text" maxlength="180" placeholder="What do the records say about…" autocomplete="off" aria-labelledby="ask-label">
+          <button type="submit">Ask</button>
+        </div>
+      </form>
       <p class="map-note">Fill is how many hospitals have a linked HHS OCR breach. A green outline means the state is in the registry and has no linked breach. A green dot is a hospital whose certified product is named in a CVE record. Alaska and Hawaii are inset.</p>
-      {% if selected != "" %}<input type="hidden" name="state" value="{{ selected }}">{% endif %}
-      <label class="sr" for="q">Hospital name or CCN</label>
-      <div id="results">
-        {% include "results.html" %}
-      </div>
-      <input id="q" type="search" name="q" value="{{ query }}" placeholder="Hospital name or CCN" autocomplete="off" hx-get="/search" hx-trigger="keyup changed delay:200ms" hx-target="#results" hx-sync="this:replace">
-    </form>
+      <div id="answer"></div>
+    </div>
   </div>
   <script src="/static/htmx.min.js"></script>
+  <script src="/static/scanner.js"></script>
 </body>
 </html>

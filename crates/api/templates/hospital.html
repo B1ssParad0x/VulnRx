@@ -9,7 +9,6 @@
 <body>
   {% include "top.html" %}
   <main class="profile">
-    <p class="back"><a href="/dashboard">Map</a></p>
     <div class="split">
       <section class="panel">
         <p class="kicker">rollup</p>
@@ -21,7 +20,6 @@
         {% endif %}
         <p class="note">{{ score_note }}</p>
         <button class="explain" type="button" hx-post="/hospitals/{{ id }}/remediate" hx-target="#guidance" hx-swap="innerHTML" hx-disabled-elt="this">Remediation</button>
-        <div id="guidance"></div>
         {% if score_present %}
         <dl class="components">
           <div><dt>breach</dt><dd>{{ score_breach }}</dd></div>
@@ -49,6 +47,7 @@
         </ul>
       </section>
     </div>
+    <div id="guidance"></div>
 
     <section class="stack">
       <h2>Vendors</h2>

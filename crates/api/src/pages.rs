@@ -869,23 +869,44 @@ fn score_fields(
 
 fn score_note(method: &str) -> String {
     let Some(inputs) = method.strip_prefix("v1:") else {
-        return format!("Method {method}.");
+        return format!("This 0–100 rollup uses method {method}.");
     };
     let parts: Vec<&str> = inputs.split('+').filter(|part| !part.is_empty()).collect();
-    let mut missing = Vec::new();
-    for name in ["breach", "cve", "exposure"] {
-        if !parts.contains(&name) {
-            missing.push(name);
+    let label = |name: &str| -> &'static str {
+        match name {
+            "breach" => "linked breach reports",
+            "cve" => "linked product CVEs",
+            "exposure" => "exposure hits that name this hospital",
+            _ => "that input",
         }
-    }
+    };
+    let used = join_phrase(&parts.iter().copied().map(label).collect::<Vec<_>>());
+    let missing = ["breach", "cve", "exposure"]
+        .into_iter()
+        .filter(|name| !parts.contains(name))
+        .map(label)
+        .collect::<Vec<_>>();
     if missing.is_empty() {
-        format!("Inputs: {}.", parts.join(", "))
+        format!(
+            "0–100 composite from the linked record types below. It averages {used}. A part enters the average only when a stored link exists for it."
+        )
     } else {
         format!(
-            "Inputs: {}. Not inputs: {}.",
-            parts.join(", "),
-            missing.join(", ")
+            "0–100 composite from the linked record types below. Right now it averages {used}. It does not use {}, because no stored link exists for those yet.",
+            join_phrase(&missing)
         )
+    }
+}
+
+fn join_phrase(parts: &[&str]) -> String {
+    match parts {
+        [] => String::new(),
+        [one] => (*one).to_string(),
+        [first, second] => format!("{first} and {second}"),
+        _ => {
+            let last = parts[parts.len() - 1];
+            format!("{}, and {last}", parts[..parts.len() - 1].join(", "))
+        }
     }
 }
 
