@@ -35,7 +35,9 @@ struct LinkedProduct {
 pub async fn query_fallback(pool: &PgPool, limit: Option<i64>) -> Result<IndexReport, IngestError> {
     let limit = limit.unwrap_or(20).clamp(1, 50);
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(90))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .read_timeout(std::time::Duration::from_secs(20))
+        .timeout(std::time::Duration::from_secs(40))
         .user_agent("vulnrx/0.1")
         .build()?;
     let hospitals = hospitals_to_query(pool, limit).await?;
@@ -44,17 +46,22 @@ pub async fn query_fallback(pool: &PgPool, limit: Option<i64>) -> Result<IndexRe
         stored: 0,
         stopped: None,
     };
-    for hospital in hospitals {
+    for (n, hospital) in hospitals.iter().enumerate() {
+        eprintln!("crt.sh: {}/{} {}", n + 1, hospitals.len(), hospital.name);
         let certs = match crt_search(&client, &hospital.name).await {
             Ok(certs) => certs,
-            Err(status) if status == 429 || status == 503 => {
+            Err(CrtFail::Http(status)) if status == 429 || status == 503 => {
                 report.stopped = Some(format!(
                     "crt.sh returned HTTP {status}; no further certificate lookups"
                 ));
                 break;
             }
-            Err(status) => {
+            Err(CrtFail::Http(status)) => {
                 eprintln!("crt.sh returned HTTP {status}; skipping one hospital");
+                continue;
+            }
+            Err(CrtFail::TimedOut) => {
+                eprintln!("crt.sh timed out; skipping one hospital");
                 continue;
             }
         };
@@ -67,6 +74,7 @@ pub async fn query_fallback(pool: &PgPool, limit: Option<i64>) -> Result<IndexRe
         if let Some(product_id) = internetdb_product(&client, &host, &products).await? {
             store_fallback(pool, hospital.id, product_id, &hospital.name).await?;
             report.stored += 1;
+            eprintln!("internetdb: stored one match for {}", hospital.name);
         }
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
@@ -138,22 +146,30 @@ struct ProductVendor {
     vendor: String,
 }
 
-async fn crt_search(client: &reqwest::Client, hospital: &str) -> Result<Vec<Value>, u16> {
+enum CrtFail {
+    Http(u16),
+    TimedOut,
+}
+
+async fn crt_search(client: &reqwest::Client, hospital: &str) -> Result<Vec<Value>, CrtFail> {
     let url = format!(
         "{CRT_SH}?q={}&output=json&exclude=expired",
         urlencoding(hospital)
     );
-    let response = client.get(&url).send().await.map_err(|_| 599_u16)?;
+    let response = match tokio::time::timeout(std::time::Duration::from_secs(25), client.get(&url).send()).await {
+        Ok(Ok(response)) => response,
+        Ok(Err(_)) | Err(_) => return Err(CrtFail::TimedOut),
+    };
     let status = response.status();
     if !status.is_success() {
-        return Err(status.as_u16());
+        return Err(CrtFail::Http(status.as_u16()));
     }
-    let body = response.text().await.map_err(|_| 599_u16)?;
-    let parsed: Value = serde_json::from_str(&body).map_err(|_| 599_u16)?;
-    Ok(parsed
-        .as_array()
-        .cloned()
-        .unwrap_or_default())
+    let body = match tokio::time::timeout(std::time::Duration::from_secs(25), response.text()).await {
+        Ok(Ok(body)) => body,
+        Ok(Err(_)) | Err(_) => return Err(CrtFail::TimedOut),
+    };
+    let parsed: Value = serde_json::from_str(&body).map_err(|_| CrtFail::Http(599))?;
+    Ok(parsed.as_array().cloned().unwrap_or_default())
 }
 
 async fn internetdb_product(
