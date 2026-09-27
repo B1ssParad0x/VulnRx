@@ -3,7 +3,8 @@
 //! Two accepted paths, both exact:
 //! the CVE description contains the product name as a phrase, or the official
 //! CPE title does and the CPE vendor token is the stored vendor. A keyword
-//! that merely shares a word is not a match.
+//! that merely shares a word is not a match. An ordinary one-word name, or a
+//! multi-word name with a token shorter than four letters, is not a phrase.
 
 use std::collections::{HashMap, HashSet};
 
@@ -72,7 +73,11 @@ pub async fn match_product_cves(pool: &PgPool) -> Result<CveMatchReport, IngestE
     for (index, name) in names.iter().enumerate() {
         let group = &by_name[name];
         report.products_checked += 1;
-        let mut listed = phrase_cves(&client, &api_key, name).await?;
+        let mut listed = if name_is_distinctive(name) {
+            phrase_cves(&client, &api_key, name).await?
+        } else {
+            Vec::new()
+        };
         if let Some(identity) = cpe_identity(&client, &api_key, name, group).await? {
             let more = cpe_cves(&client, &api_key, &identity).await?;
             listed.extend(more);
@@ -127,6 +132,30 @@ pub async fn match_product_cves(pool: &PgPool) -> Result<CveMatchReport, IngestE
 fn searchable(name: &str) -> bool {
     let name = name.trim();
     name.chars().count() >= 10 && !name.contains(['\n', '\r'])
+}
+
+/// A phrase is a product identity only when it cannot be ordinary English.
+/// "Communicate" is one dictionary word. "Haystack iS" lowercases to "haystack is".
+/// A single token qualifies when a later character is a capital or a digit
+/// (`eClinicalWorks`). Two or more tokens qualify when each is at least four characters
+/// (`Mirth Connect`).
+fn name_is_distinctive(name: &str) -> bool {
+    let tokens: Vec<&str> = name
+        .split(|ch: char| !ch.is_ascii_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .collect();
+    match tokens.as_slice() {
+        [token] => token_is_distinctive(token),
+        [_, ..] => tokens.iter().all(|token| token.chars().count() >= 4),
+        [] => false,
+    }
+}
+
+fn token_is_distinctive(token: &str) -> bool {
+    token
+        .chars()
+        .skip(1)
+        .any(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit())
 }
 
 async fn load_products(pool: &PgPool) -> Result<Vec<StoredProduct>, IngestError> {
@@ -351,7 +380,8 @@ fn applies(product: &StoredProduct, cve: &ListedCve, sole_vendor: bool) -> bool 
             vendor_tokens(&product.vendor).iter().any(|token| token == &vendor)
         });
     }
-    sole_vendor || contains_phrase(&cve.description, &product.vendor)
+    name_is_distinctive(&product.name)
+        && (sole_vendor || contains_phrase(&cve.description, &product.vendor))
 }
 
 fn dedup_cves(listed: Vec<ListedCve>) -> Vec<ListedCve> {
@@ -537,7 +567,7 @@ fn cpe_token(name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{cpe_vendor_product, vendor_tokens};
+    use super::{cpe_vendor_product, name_is_distinctive, vendor_tokens};
 
     #[test]
     fn parses_a_cpe_vendor_and_product() {
@@ -553,5 +583,14 @@ mod tests {
     fn vendor_tokens_drop_a_corporate_suffix() {
         let tokens = vendor_tokens("Medical Information Technology, Inc.");
         assert!(tokens.iter().any(|token| token == "medical_information_technology"));
+    }
+
+    #[test]
+    fn ordinary_words_are_not_product_identities() {
+        assert!(!name_is_distinctive("Communicate"));
+        assert!(!name_is_distinctive("Haystack iS"));
+        assert!(name_is_distinctive("eClinicalWorks"));
+        assert!(name_is_distinctive("Mirth Connect"));
+        assert!(name_is_distinctive("EpicCare Inpatient Base"));
     }
 }
