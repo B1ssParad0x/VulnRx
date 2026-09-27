@@ -174,6 +174,7 @@ exposure_hits AS (
     FROM exposures e
     JOIN hospital_vendor_map m ON m.product_id = e.product_id
     WHERE e.product_id IS NOT NULL
+      AND e.hospital_id IS NULL
 ),
 exposure_scored AS (
     SELECT

@@ -329,7 +329,7 @@ LEFT JOIN hospital_vendor_map m
     ON m.product_id = e.product_id
    AND m.hospital_id = $1
 WHERE e.hospital_id = $1
-   OR m.id IS NOT NULL
+   OR (e.hospital_id IS NULL AND m.id IS NOT NULL)
 ORDER BY e.last_seen DESC NULLS LAST, e.id
 ";
 

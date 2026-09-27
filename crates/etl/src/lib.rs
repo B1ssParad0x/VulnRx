@@ -2,6 +2,7 @@
 
 mod advisories;
 mod breaches;
+mod certs;
 mod chpl;
 mod cve_list;
 mod cve_match;
@@ -14,6 +15,7 @@ mod pi2024;
 mod score;
 
 pub use advisories::{AdvisoryReport, match_advisories};
+pub use certs::query_fallback;
 pub use breaches::{
     BREACH_PORTAL_URL, BreachRecord, BreachReport, fetch_breach_portal, ingest_breaches,
 };
@@ -22,7 +24,7 @@ pub use cve_list::{CveListReport, match_cve_list};
 pub use cve_match::{CveMatchReport, match_product_cves};
 pub use edgar::{EdgarFiling, EdgarReport, fetch_item_105_filings, ingest_filings};
 pub use hospitals::{HOSPITAL_REGISTRY_URL, HospitalLoadReport, ingest_hospital_registry};
-pub use index::{IndexReport, query_censys, query_shodan};
+pub use index::{ExposureRun, IndexReport, query_censys, query_exposure, query_netlas, query_shodan, query_zoomeye};
 pub use kev::{
     KEV_CATALOG_URL, KevEntry, KevReport, NvdFacts, fetch_epss, fetch_nvd_kev, ingest_kev,
     parse_kev_catalog,

@@ -223,7 +223,41 @@ async fn run() -> Result<ExitCode, vulnrx_etl::IngestError> {
             );
             Ok(ExitCode::SUCCESS)
         }
+        Command::Zoomeye { limit } => {
+            print_index("zoomeye", &vulnrx_etl::query_zoomeye(&pool, limit).await?);
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Netlas { limit } => {
+            print_index("netlas", &vulnrx_etl::query_netlas(&pool, limit).await?);
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Fallback { limit } => {
+            print_index("fallback", &vulnrx_etl::query_fallback(&pool, limit).await?);
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Exposure { limit } => {
+            let run = vulnrx_etl::query_exposure(&pool, limit).await?;
+            if let Some(report) = &run.zoomeye {
+                print_index("zoomeye", report);
+            }
+            if let Some(report) = &run.netlas {
+                print_index("netlas", report);
+            }
+            if let Some(report) = &run.fallback {
+                print_index("fallback", report);
+            }
+            Ok(ExitCode::SUCCESS)
+        }
     }
+}
+
+fn print_index(label: &str, report: &vulnrx_etl::IndexReport) {
+    println!(
+        "{label}: {} queries, {} confirming hits{}",
+        report.queries,
+        report.stored,
+        stopped_suffix(report.stopped.as_deref())
+    );
 }
 
 fn stopped_suffix(stopped: Option<&str>) -> String {
@@ -256,6 +290,10 @@ enum Command {
     Score,
     Shodan { limit: Option<i64> },
     Censys { limit: Option<i64> },
+    Zoomeye { limit: Option<i64> },
+    Netlas { limit: Option<i64> },
+    Fallback { limit: Option<i64> },
+    Exposure { limit: Option<i64> },
     Cve,
     CveList,
     Advisories,
@@ -302,6 +340,22 @@ fn parse_args() -> Result<Command, String> {
         Some("censys") => {
             raw.remove(0);
             "censys"
+        }
+        Some("zoomeye") => {
+            raw.remove(0);
+            "zoomeye"
+        }
+        Some("netlas") => {
+            raw.remove(0);
+            "netlas"
+        }
+        Some("fallback") => {
+            raw.remove(0);
+            "fallback"
+        }
+        Some("exposure") => {
+            raw.remove(0);
+            "exposure"
         }
         Some("cve") => {
             raw.remove(0);
@@ -397,6 +451,30 @@ fn parse_args() -> Result<Command, String> {
             }
             Command::Censys { limit }
         }
+        "zoomeye" => {
+            if state.is_some() || url.is_some() {
+                return Err(usage());
+            }
+            Command::Zoomeye { limit }
+        }
+        "netlas" => {
+            if state.is_some() || url.is_some() {
+                return Err(usage());
+            }
+            Command::Netlas { limit }
+        }
+        "fallback" => {
+            if state.is_some() || url.is_some() {
+                return Err(usage());
+            }
+            Command::Fallback { limit }
+        }
+        "exposure" => {
+            if state.is_some() || url.is_some() {
+                return Err(usage());
+            }
+            Command::Exposure { limit }
+        }
         "cve" => {
             if state.is_some() || url.is_some() || limit.is_some() {
                 return Err(usage());
@@ -436,6 +514,10 @@ fn usage() -> String {
      vulnrx-etl score\n\
      vulnrx-etl shodan [--limit N]\n\
      vulnrx-etl censys [--limit N]\n\
+     vulnrx-etl zoomeye [--limit N]\n\
+     vulnrx-etl netlas [--limit N]\n\
+     vulnrx-etl fallback [--limit N]\n\
+     vulnrx-etl exposure [--limit N]\n\
      vulnrx-etl cve\n\
      vulnrx-etl cve-list\n\
      vulnrx-etl advisories\n\
@@ -448,7 +530,7 @@ fn usage() -> String {
      kev loads the CISA known-exploited catalog, FIRST.org EPSS, and NVD CVSS. A product is linked only when the catalog's vendor and product names match one stored product.\n\
      edgar loads 8-K Item 1.05 incident reports since December 2023 and 10-K Item 1C cybersecurity disclosures filed from 2024 onward for hospital, nursing, health-plan, and medical-device industries. The summary is an excerpt of the filing. SEC requires a contact in the user agent; set SEC_USER_AGENT if the default is rejected.\n\
      score writes a hospital rollup only where a linked breach, Item 1.05 filing, product CVE, or exposure exists. Components with no linked input are stored as 0 and left out of the average. method names the inputs that were used.\n\
-     shodan and censys query an existing public index for stored product names. Shodan search requires a paid membership. Censys search needs CENSYS_ORGANIZATION_ID, which free accounts do not have. Default limit is 20 queries, and the maximum is 50. A hit is stored only when the result names that product. Host addresses are not stored.\n\
+     shodan and censys query an existing public index for stored product names. Shodan search requires a paid membership. Censys search needs CENSYS_ORGANIZATION_ID, which free accounts do not have. zoomeye and netlas are the free search indexes; set ZOOMEYE_API_KEY and NETLAS_API_KEY. exposure runs whichever of those keys is set. fallback, also used when neither key is set or both searches are refused, reads crt.sh and then Shodan InternetDB. A hit is stored only when the result names that product, and for the fallback only when one certificate names one hospital and one CPE names one of its products. Default limit is 20 queries, and the maximum is 50. Host addresses are not stored.\n\
      cve asks NVD, using NVD_API_KEY, for vulnerabilities whose description or official CPE title contains the stored product name as an exact phrase. The CPE vendor must match the stored vendor. Requires NVD_API_KEY.\n\
      cve-list reads the CVE Project's CVE List v5 baseline. A product is linked only when the record's vendor and product fields, or its CPE, name that stored product. A placeholder such as n/a is ignored.\n\
      advisories reads CISA CSAF files. A product is linked only when the advisory's product tree names that vendor and product and the CVE lists that product as known affected.\n\

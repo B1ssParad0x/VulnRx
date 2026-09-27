@@ -991,6 +991,9 @@ fn source_label(source: &str) -> &str {
         "cms_hospital_general_information" => "CMS hospital general information",
         "shodan" => "Shodan",
         "censys" => "Censys",
+        "zoomeye" => "ZoomEye",
+        "netlas" => "Netlas",
+        "internetdb" => "Shodan InternetDB",
         other => other,
     }
 }

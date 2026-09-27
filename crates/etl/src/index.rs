@@ -1,4 +1,4 @@
-//! Ask Shodan or Censys whether their existing index already names a stored product.
+//! Ask an existing index whether it already names a stored product.
 //!
 //! This does not open a connection to a hospital. A hit is stored only when the
 //! index result itself names that product. Host addresses are not stored.
@@ -106,8 +106,110 @@ pub async fn query_censys(pool: &PgPool, limit: Option<i64>) -> Result<IndexRepo
     Ok(report)
 }
 
+pub async fn query_zoomeye(pool: &PgPool, limit: Option<i64>) -> Result<IndexReport, IngestError> {
+    let key = require_key("ZOOMEYE_API_KEY")?;
+    query_named(pool, limit, "zoomeye", &key, IndexKind::Zoomeye).await
+}
+
+pub async fn query_netlas(pool: &PgPool, limit: Option<i64>) -> Result<IndexReport, IngestError> {
+    let key = require_key("NETLAS_API_KEY")?;
+    query_named(pool, limit, "netlas", &key, IndexKind::Netlas).await
+}
+
+/// ZoomEye and Netlas when their keys are set. crt.sh plus InternetDB only when
+/// neither search can be asked, or every configured search is refused.
+pub async fn query_exposure(pool: &PgPool, limit: Option<i64>) -> Result<ExposureRun, IngestError> {
+    let zoomeye = optional_key("ZOOMEYE_API_KEY");
+    let netlas = optional_key("NETLAS_API_KEY");
+    let mut run = ExposureRun {
+        zoomeye: None,
+        netlas: None,
+        fallback: None,
+    };
+    let mut asked = false;
+    if zoomeye.is_some() {
+        let report = query_zoomeye(pool, limit).await?;
+        asked = asked || report.stopped.is_none();
+        run.zoomeye = Some(report);
+    }
+    if netlas.is_some() {
+        let report = query_netlas(pool, limit).await?;
+        asked = asked || report.stopped.is_none();
+        run.netlas = Some(report);
+    }
+    if !asked {
+        run.fallback = Some(crate::certs::query_fallback(pool, limit).await?);
+    }
+    Ok(run)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExposureRun {
+    pub zoomeye: Option<IndexReport>,
+    pub netlas: Option<IndexReport>,
+    pub fallback: Option<IndexReport>,
+}
+
+enum IndexKind {
+    Zoomeye,
+    Netlas,
+}
+
+async fn query_named(
+    pool: &PgPool,
+    limit: Option<i64>,
+    source: &'static str,
+    key: &str,
+    kind: IndexKind,
+) -> Result<IndexReport, IngestError> {
+    let client = http_client()?;
+    let products = products_to_query(pool, clamp_limit(limit)).await?;
+    let mut report = IndexReport {
+        queries: 0,
+        stored: 0,
+        stopped: None,
+    };
+    for product in products {
+        let found = match kind {
+            IndexKind::Zoomeye => zoomeye_search(&client, key, &product.query).await,
+            IndexKind::Netlas => netlas_search(&client, key, &product.query).await,
+        };
+        match found {
+            Ok(found) => {
+                report.queries += 1;
+                if let Some(hit) = confirming_hit(&found.matches, &product.name) {
+                    store_hit(
+                        pool,
+                        product.id,
+                        source,
+                        &hit.service,
+                        hit.seen,
+                        &format!("{source} {} total {} {}", product.query, found.total, hit.service),
+                    )
+                    .await?;
+                    report.stored += 1;
+                }
+            }
+            Err(Stop::Credits(message)) => {
+                report.stopped = Some(message);
+                break;
+            }
+            Err(Stop::Failed(err)) => return Err(err),
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+    Ok(report)
+}
+
 fn clamp_limit(limit: Option<i64>) -> i64 {
     limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT)
+}
+
+fn optional_key(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn require_key(name: &'static str) -> Result<String, IngestError> {
@@ -291,6 +393,159 @@ fn redact(body: &str, secret: &str) -> String {
     collapsed.chars().take(160).collect()
 }
 
+async fn zoomeye_search(
+    client: &reqwest::Client,
+    key: &str,
+    query: &str,
+) -> Result<SearchHit, Stop> {
+    let response = client
+        .post("https://api.zoomeye.ai/v2/search")
+        .header("API-KEY", key)
+        .header("Content-Type", "application/json")
+        .body(
+            serde_json::json!({
+                "qbase64": b64(query.as_bytes()),
+                "page": 1,
+                "pagesize": 5,
+                "sub_type": "all",
+                "fields": "product,title,port,protocol,update_time,device"
+            })
+            .to_string(),
+        )
+        .send()
+        .await
+        .map_err(|err| Stop::Failed(err.into()))?;
+    let status = response.status();
+    let body = response.text().await.map_err(|err| Stop::Failed(err.into()))?;
+    if status == reqwest::StatusCode::UNAUTHORIZED
+        || status == reqwest::StatusCode::FORBIDDEN
+        || status == reqwest::StatusCode::PAYMENT_REQUIRED
+        || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+    {
+        return Err(Stop::Credits(format!(
+            "zoomeye returned HTTP {status} ({}); no further index queries",
+            redact(&body, key)
+        )));
+    }
+    if !status.is_success() {
+        return Err(Stop::Failed(IngestError::HttpStatus {
+            url: "https://api.zoomeye.ai/v2/search".to_string(),
+            status: status.as_u16(),
+        }));
+    }
+    let parsed: Value = serde_json::from_str(&body).map_err(|err| Stop::Failed(err.into()))?;
+    let matches = parsed
+        .get("data")
+        .or_else(|| parsed.get("matches"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if matches.is_empty()
+        && let Some(message) = parsed.get("message").and_then(Value::as_str)
+        && !message.is_empty()
+        && parsed.get("total").and_then(Value::as_i64).unwrap_or(0) == 0
+        && parsed.get("code").and_then(Value::as_i64).unwrap_or(0) != 0
+    {
+        return Err(Stop::Credits(format!(
+            "zoomeye returned ({}); no further index queries",
+            redact(message, key)
+        )));
+    }
+    Ok(SearchHit {
+        total: parsed.get("total").and_then(Value::as_i64).unwrap_or(matches.len() as i64),
+        matches,
+    })
+}
+
+async fn netlas_search(
+    client: &reqwest::Client,
+    key: &str,
+    query: &str,
+) -> Result<SearchHit, Stop> {
+    let url = reqwest::Url::parse_with_params(
+        "https://app.netlas.io/api/responses/",
+        [
+            ("q", query),
+            ("fields", "http.title,protocol"),
+            ("source_type", "include"),
+        ],
+    )
+    .map_err(|err| Stop::Failed(IngestError::Portal(err.to_string())))?;
+    let response = client
+        .get(url)
+        .header("Authorization", format!("Bearer {key}"))
+        .send()
+        .await
+        .map_err(|err| Stop::Failed(err.into()))?;
+    let status = response.status();
+    let body = response.text().await.map_err(|err| Stop::Failed(err.into()))?;
+    if status == reqwest::StatusCode::UNAUTHORIZED
+        || status == reqwest::StatusCode::FORBIDDEN
+        || status == reqwest::StatusCode::PAYMENT_REQUIRED
+        || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+    {
+        return Err(Stop::Credits(format!(
+            "netlas returned HTTP {status} ({}); no further index queries",
+            redact(&body, key)
+        )));
+    }
+    if !status.is_success() {
+        return Err(Stop::Failed(IngestError::HttpStatus {
+            url: "https://app.netlas.io/api/responses/".to_string(),
+            status: status.as_u16(),
+        }));
+    }
+    let parsed: Value = serde_json::from_str(&body).map_err(|err| Stop::Failed(err.into()))?;
+    let matches: Vec<Value> = parsed
+        .get("items")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| item.get("data").cloned().unwrap_or_else(|| item.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(SearchHit {
+        total: parsed
+            .get("count")
+            .and_then(Value::as_i64)
+            .unwrap_or(matches.len() as i64),
+        matches,
+    })
+}
+
+fn b64(data: &[u8]) -> String {
+    const ALPH: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    let mut index = 0;
+    while index + 3 <= data.len() {
+        let n = ((data[index] as u32) << 16)
+            | ((data[index + 1] as u32) << 8)
+            | data[index + 2] as u32;
+        out.push(ALPH[((n >> 18) & 63) as usize] as char);
+        out.push(ALPH[((n >> 12) & 63) as usize] as char);
+        out.push(ALPH[((n >> 6) & 63) as usize] as char);
+        out.push(ALPH[(n & 63) as usize] as char);
+        index += 3;
+    }
+    let rest = data.len() - index;
+    if rest == 1 {
+        let n = (data[index] as u32) << 16;
+        out.push(ALPH[((n >> 18) & 63) as usize] as char);
+        out.push(ALPH[((n >> 12) & 63) as usize] as char);
+        out.push('=');
+        out.push('=');
+    } else if rest == 2 {
+        let n = ((data[index] as u32) << 16) | ((data[index + 1] as u32) << 8);
+        out.push(ALPH[((n >> 18) & 63) as usize] as char);
+        out.push(ALPH[((n >> 12) & 63) as usize] as char);
+        out.push(ALPH[((n >> 6) & 63) as usize] as char);
+        out.push('=');
+    }
+    out
+}
+
 fn confirming_hit(matches: &[Value], product_name: &str) -> Option<ConfirmedHit> {
     let needle = product_name.trim().to_ascii_lowercase();
     for hit in matches {
@@ -307,6 +562,7 @@ fn confirming_hit(matches: &[Value], product_name: &str) -> Option<ConfirmedHit>
         };
         let seen = hit
             .get("timestamp")
+            .or_else(|| hit.get("update_time"))
             .and_then(Value::as_str)
             .and_then(|value| NaiveDate::parse_from_str(&value[..value.len().min(10)], "%Y-%m-%d").ok());
         return Some(ConfirmedHit { service, seen });
@@ -318,10 +574,17 @@ fn collect_named_strings<'a>(value: &'a Value, keys: &[&str], out: &mut Vec<&'a 
     match value {
         Value::Object(map) => {
             for (key, child) in map {
-                if keys.contains(&key.as_str())
-                    && let Some(text) = child.as_str()
-                {
-                    out.push(text);
+                if keys.contains(&key.as_str()) {
+                    if let Some(text) = child.as_str() {
+                        out.push(text);
+                    }
+                    if let Some(items) = child.as_array() {
+                        for item in items {
+                            if let Some(text) = item.as_str() {
+                                out.push(text);
+                            }
+                        }
+                    }
                 }
                 collect_named_strings(child, keys, out);
             }
@@ -390,5 +653,10 @@ mod tests {
         let hit = confirming_hit(&matches, "EpicCare Inpatient Base").unwrap();
         assert_eq!(hit.service, "443/tcp");
         assert!(confirming_hit(&matches[..1], "EpicCare Inpatient Base").is_none());
+    }
+
+    #[test]
+    fn encodes_zoomeye_queries() {
+        assert_eq!(super::b64(b"hello"), "aGVsbG8=");
     }
 }

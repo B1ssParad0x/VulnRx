@@ -9,6 +9,9 @@ use uuid::Uuid;
 pub enum ExposureSource {
     Shodan,
     Censys,
+    Zoomeye,
+    Netlas,
+    InternetDb,
 }
 
 impl ExposureSource {
@@ -16,6 +19,9 @@ impl ExposureSource {
         match self {
             Self::Shodan => "shodan",
             Self::Censys => "censys",
+            Self::Zoomeye => "zoomeye",
+            Self::Netlas => "netlas",
+            Self::InternetDb => "internetdb",
         }
     }
 }
@@ -39,6 +45,9 @@ impl TryFrom<&str> for ExposureSource {
         match value {
             "shodan" => Ok(Self::Shodan),
             "censys" => Ok(Self::Censys),
+            "zoomeye" => Ok(Self::Zoomeye),
+            "netlas" => Ok(Self::Netlas),
+            "internetdb" => Ok(Self::InternetDb),
             other => Err(InvalidExposureSource {
                 value: other.to_string(),
             }),
@@ -46,7 +55,7 @@ impl TryFrom<&str> for ExposureSource {
     }
 }
 
-/// One hit from a Shodan or Censys index query.
+/// One hit from an existing public index. Host addresses are not stored.
 #[derive(Debug, Clone, PartialEq, Eq, FromRow, Serialize, Deserialize)]
 pub struct Exposure {
     pub id: Uuid,
