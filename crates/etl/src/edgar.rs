@@ -108,7 +108,20 @@ async fn fetch_pages(
         if from > 0 {
             tokio::time::sleep(std::time::Duration::from_millis(150)).await;
         }
-        let page = search_page(client, query, forms, start, end, sic, from).await?;
+        let page = search_page(
+            client,
+            &PageQuery {
+                query,
+                forms,
+                start,
+                end,
+                sic,
+                from,
+                attempts: 6,
+                pause_secs: 2,
+            },
+        )
+        .await?;
         let total = page.total;
         if page.filings.is_empty() {
             break;
@@ -123,24 +136,100 @@ async fn fetch_pages(
     Ok(filings)
 }
 
+/// One industry code. A page is kept only when a hit's SIC is the code that was requested.
+pub async fn fetch_sic_filings(sic: &str) -> Result<Vec<EdgarFiling>, IngestError> {
+    if sic.len() != 4 || !sic.chars().all(|ch| ch.is_ascii_digit()) {
+        return Err(IngestError::Portal(format!(
+            "sic must be four digits, got {sic}"
+        )));
+    }
+    tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+    let client = sec_client()?;
+    let end = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let mut filings = Vec::new();
+    let mut from = 0_usize;
+    loop {
+        if from > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        }
+        let page = search_page(
+            &client,
+            &PageQuery {
+                query: "\"Item 1C. Cybersecurity\"",
+                forms: "10-K",
+                start: "2024-01-01",
+                end: &end,
+                sic: Some(sic),
+                from,
+                attempts: 8,
+                pause_secs: 4,
+            },
+        )
+        .await?;
+        if page.filings.is_empty() {
+            break;
+        }
+        eprintln!(
+            "sec sic {sic}: accepted {} filings from offset {from}",
+            page.filings.len()
+        );
+        let count = page.filings.len();
+        let total = page.total;
+        filings.extend(page.filings);
+        from += count;
+        if from >= total || count < PAGE_SIZE {
+            break;
+        }
+    }
+    for filing in &mut filings {
+        tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+        filing.summary = match client.get(&filing.source_url).send().await {
+            Ok(response) if response.status().is_success() => response
+                .text()
+                .await
+                .ok()
+                .and_then(|html| excerpt_around(&html, "item 1c")),
+            _ => None,
+        };
+    }
+    Ok(filings)
+}
+
+struct PageQuery<'a> {
+    query: &'a str,
+    forms: &'a str,
+    start: &'a str,
+    end: &'a str,
+    sic: Option<&'a str>,
+    from: usize,
+    attempts: u32,
+    pause_secs: u64,
+}
+
 async fn search_page(
     client: &reqwest::Client,
-    query: &str,
-    forms: &str,
-    start: &str,
-    end: &str,
-    sic: Option<&str>,
-    from: usize,
+    page_query: &PageQuery<'_>,
 ) -> Result<SearchPage, IngestError> {
-    for attempt in 0..6 {
+    for attempt in 0..page_query.attempts {
         if attempt > 0 {
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(page_query.pause_secs)).await;
         }
+        // The catalog caches a search by its dates and then ignores a new SIC on
+        // that same URL. A future end date is unique per code and per try, and it
+        // still includes every filing through today.
+        let end = match page_query.sic {
+            Some(sic) => sic_cache_end(sic, attempt),
+            None => page_query.end.to_string(),
+        };
         let mut url = format!(
-            "{EDGAR_SEARCH_URL}?q={}&forms={forms}&dateRange=custom&startdt={start}&enddt={end}&from={from}",
-            encode_query(query)
+            "{EDGAR_SEARCH_URL}?q={}&forms={}&dateRange=custom&startdt={}&enddt={}&from={}",
+            encode_query(page_query.query),
+            page_query.forms,
+            page_query.start,
+            end,
+            page_query.from
         );
-        if let Some(sic) = sic {
+        if let Some(sic) = page_query.sic {
             url.push_str("&sics=");
             url.push_str(sic);
         }
@@ -152,14 +241,25 @@ async fn search_page(
             });
         }
         let page = parse_search(&response.bytes().await?)?;
-        let sic_ok = sic.is_none_or(|wanted| {
-            page.sample_sics.iter().any(|found| found == wanted) || page.total == 0
+        let matched = page_query.sic.is_none_or(|wanted| {
+            page.sample_sics.iter().any(|found| found == wanted)
         });
-        if sic_ok {
+        if matched {
+            return Ok(page);
+        }
+        if let Some(wanted) = page_query.sic {
+            eprintln!(
+                "sec sic {wanted}: page total {} sample {}; retrying",
+                page.total,
+                page.sample_sics.join(",")
+            );
+        }
+        let last_try = attempt + 1 == page_query.attempts;
+        if page.total == 0 && last_try {
             return Ok(page);
         }
     }
-    if let Some(sic) = sic {
+    if let Some(sic) = page_query.sic {
         eprintln!("sec sic {sic} did not match the catalog filter; skipped");
     }
     Ok(SearchPage {
@@ -167,6 +267,13 @@ async fn search_page(
         filings: Vec::new(),
         sample_sics: Vec::new(),
     })
+}
+
+fn sic_cache_end(sic: &str, attempt: u32) -> String {
+    let offset = sic.parse::<i64>().unwrap_or(1);
+    let today = chrono::Utc::now().date_naive();
+    let end = today + chrono::Duration::days(400 + offset + i64::from(attempt) * 17);
+    end.format("%Y-%m-%d").to_string()
 }
 
 fn encode_query(query: &str) -> String {
@@ -477,7 +584,7 @@ WHERE filing.source = $1
 
 #[cfg(test)]
 mod tests {
-    use super::{excerpt_around, parse_search};
+    use super::{excerpt_around, parse_search, sic_cache_end};
 
     #[test]
     fn parses_an_item_105_hit_into_an_archives_url() {
@@ -530,6 +637,18 @@ mod tests {
         assert_eq!(page.filings[0].filing_type, "10-K Item 1C");
         assert_eq!(page.filings[0].company_name, "HCA Healthcare, Inc.");
         assert_eq!(page.sample_sics, vec!["8062".to_string()]);
+    }
+
+    #[test]
+    fn each_industry_code_gets_its_own_future_search_date() {
+        let surgical = sic_cache_end("3841", 0);
+        let electromedical = sic_cache_end("3845", 0);
+        let retry = sic_cache_end("3841", 1);
+        assert_ne!(surgical, electromedical);
+        assert_ne!(surgical, retry);
+        let today = chrono::Utc::now().date_naive().format("%Y-%m-%d").to_string();
+        assert!(surgical.as_str() > today.as_str());
+        assert!(electromedical.as_str() > today.as_str());
     }
 
     #[test]

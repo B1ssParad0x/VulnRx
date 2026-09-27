@@ -22,7 +22,9 @@ pub use breaches::{
 pub use chpl::{BundleProduct, CehrtBundle, ExpandReport, expand_cehrt, link_cehrt_bundles};
 pub use cve_list::{CveListReport, match_cve_list};
 pub use cve_match::{CveMatchReport, match_product_cves};
-pub use edgar::{EdgarFiling, EdgarReport, fetch_item_105_filings, ingest_filings};
+pub use edgar::{
+    EdgarFiling, EdgarReport, fetch_item_105_filings, fetch_sic_filings, ingest_filings,
+};
 pub use hospitals::{HOSPITAL_REGISTRY_URL, HospitalLoadReport, ingest_hospital_registry};
 pub use index::{ExposureRun, IndexReport, query_censys, query_exposure, query_netlas, query_shodan, query_zoomeye};
 pub use kev::{

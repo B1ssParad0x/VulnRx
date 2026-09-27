@@ -154,8 +154,12 @@ async fn run() -> Result<ExitCode, vulnrx_etl::IngestError> {
             );
             Ok(ExitCode::SUCCESS)
         }
-        Command::Edgar => {
-            let filings = vulnrx_etl::fetch_item_105_filings().await?;
+        Command::Edgar { sic } => {
+            let filings = if let Some(sic) = sic.as_deref() {
+                vulnrx_etl::fetch_sic_filings(sic).await?
+            } else {
+                vulnrx_etl::fetch_item_105_filings().await?
+            };
             let report = vulnrx_etl::ingest_filings(&pool, &filings).await?;
             println!(
                 "sec edgar: upserted {} cybersecurity filings ({} with an excerpt), linked {} hospitals and {} vendors",
@@ -286,7 +290,7 @@ enum Command {
         state: Option<String>,
     },
     Kev,
-    Edgar,
+    Edgar { sic: Option<String> },
     Score,
     Shodan { limit: Option<i64> },
     Censys { limit: Option<i64> },
@@ -380,11 +384,13 @@ fn parse_args() -> Result<Command, String> {
     let mut state = None;
     let mut url = None;
     let mut limit = None;
+    let mut sic = None;
     let mut rest = raw.into_iter();
     while let Some(arg) = rest.next() {
         match arg.as_str() {
             "--state" => state = Some(rest.next().ok_or_else(usage)?),
             "--url" => url = Some(rest.next().ok_or_else(usage)?),
+            "--sic" => sic = Some(rest.next().ok_or_else(usage)?),
             "--limit" => {
                 let raw_limit = rest.next().ok_or_else(usage)?;
                 limit = Some(
@@ -395,6 +401,9 @@ fn parse_args() -> Result<Command, String> {
             }
             _ => return Err(usage()),
         }
+    }
+    if sic.is_some() && kind != "edgar" {
+        return Err(usage());
     }
     Ok(match kind {
         "hospitals" => {
@@ -431,7 +440,7 @@ fn parse_args() -> Result<Command, String> {
             if state.is_some() || url.is_some() || limit.is_some() {
                 return Err(usage());
             }
-            Command::Edgar
+            Command::Edgar { sic }
         }
         "score" => {
             if state.is_some() || url.is_some() || limit.is_some() {
@@ -510,7 +519,7 @@ fn usage() -> String {
      vulnrx-etl expand-cehrt\n\
      vulnrx-etl breaches [--state XX]\n\
      vulnrx-etl kev\n\
-     vulnrx-etl edgar\n\
+     vulnrx-etl edgar [--sic 8062]\n\
      vulnrx-etl score\n\
      vulnrx-etl shodan [--limit N]\n\
      vulnrx-etl censys [--limit N]\n\
@@ -528,7 +537,7 @@ fn usage() -> String {
      expand-cehrt asks CHPL which products are inside those bundle ids. It requires CHPL_API_KEY.\n\
      breaches reads the HHS OCR breach portal and links a row to a hospital only when the name and state match one facility.\n\
      kev loads the CISA known-exploited catalog, FIRST.org EPSS, and NVD CVSS. A product is linked only when the catalog's vendor and product names match one stored product.\n\
-     edgar loads 8-K Item 1.05 incident reports since December 2023 and 10-K Item 1C cybersecurity disclosures filed from 2024 onward for hospital, nursing, health-plan, and medical-device industries. The summary is an excerpt of the filing. SEC requires a contact in the user agent; set SEC_USER_AGENT if the default is rejected.\n\
+     edgar loads 8-K Item 1.05 incident reports since December 2023 and 10-K Item 1C cybersecurity disclosures filed from 2024 onward for hospital, nursing, health-plan, and medical-device industries. The summary is an excerpt of the filing. --sic loads one industry code and keeps the page only when EDGAR's result carries that code. SEC requires a contact in the user agent; set SEC_USER_AGENT if the default is rejected.\n\
      score writes a hospital rollup only where a linked breach, Item 1.05 filing, product CVE, or exposure exists. Components with no linked input are stored as 0 and left out of the average. method names the inputs that were used.\n\
      shodan and censys query an existing public index for stored product names. Shodan search requires a paid membership. Censys search needs CENSYS_ORGANIZATION_ID, which free accounts do not have. zoomeye and netlas are the free search indexes; set ZOOMEYE_API_KEY and NETLAS_API_KEY. exposure runs whichever of those keys is set. fallback, also used when neither key is set or both searches are refused, reads crt.sh and then Shodan InternetDB. A hit is stored only when the result names that product, and for the fallback only when one certificate names one hospital and one CPE names one of its products. Default limit is 20 queries, and the maximum is 50. Host addresses are not stored.\n\
      cve asks NVD, using NVD_API_KEY, for vulnerabilities whose description or official CPE title contains the stored product name as an exact phrase. The CPE vendor must match the stored vendor. Requires NVD_API_KEY.\n\
