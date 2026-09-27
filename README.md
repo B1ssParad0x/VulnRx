@@ -1,31 +1,61 @@
 # VulnRx
 
-Hospital vendor and vulnerability risk intelligence. Search a U.S. hospital and see which technology vendors public records associate with it, which known vulnerabilities apply to that stack, and a composite risk score computed from those records.
+![VulnRx](Logo.png)
+
+Hospital vendor and vulnerability risk from the public record. Search a U.S. Medicare-registered hospital and see which technology vendors public files already name, which CVEs and breaches attach to that stack, and a composite rollup built only from those links.
+
+TigerHacks 2026 · health theme.
 
 ## Guardrails
 
-- Shows evidence of exploitability (CVSS, EPSS, KEV status, confirmed exposure). Does not generate exploit code or proof-of-concept steps.
-- Does not scan or probe hospital networks. Exposure data, when present, comes from querying an existing public index.
-- Every stored relationship or event names its public source.
+- Surfaces evidence of exploitability (CVSS, EPSS, KEV, confirmed exposure). Does **not** generate exploit code or proof-of-concept steps.
+- Does **not** scan or probe hospital networks. Exposure rows come from querying an existing public index.
+- Every stored relationship or event names its public source. No invented vendor links, placeholder hospitals, or seeded CVEs.
 
-## Database
-
-Postgres 16 with TimescaleDB. The image only starts the server. Schema lives in [`migrations/`](migrations) and is applied by the `vulnrx-models` crate, so the same files run in Docker and anywhere else.
+## Quick start
 
 ```bash
+cp .env.example .env
 docker compose up -d
 cargo run -p vulnrx-models --bin migrate
+cargo run -p vulnrx-api
 ```
 
-`migrate` uses `DATABASE_URL` when it is set, and otherwise connects to the local Compose database. Copy `.env.example` to `.env` if you want that variable defined. The local password is a development default, not a credential.
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080). `BIND_ADDR` defaults to `127.0.0.1:8080`.
+
+`migrate` uses `DATABASE_URL` when set; otherwise it connects to the local Compose database. The Compose password is a development default, not a secret.
 
 ```bash
 cargo test -p vulnrx-models
+cargo test -p vulnrx-api
 ```
 
-## Hospital products
+## What you see
 
-[`vulnrx-etl`](crates/etl) loads public CMS and ONC files. Vendor links are written only when a file or a CHPL lookup names the product.
+| Surface | What it shows |
+| --- | --- |
+| `/` | Landing page |
+| `/dashboard` | US map, hospital search, and ask-the-records |
+| `/hospitals/{id}` | Facility, vendors, breaches/filings, CVEs, exposure, rollup, remediation |
+| `/vendors/{id}` | Vendor products, linked hospitals, CVEs, and breaches that name that vendor |
+| `/kev` | CISA known-exploited catalog (catalog vendor/product strings only) |
+
+On the map: fill is how many hospitals in that state have a linked HHS OCR breach. A green outline means the state is in the registry and has no linked breach. A green dot is a hospital whose certified product is named in a CVE record. Alaska and Hawaii are inset. The ticker lists linked OCR breaches and Item 1.05 filings only.
+
+Gemini (`gemini-3.5-flash-lite`) runs only on click for CVE Explain, Ask, and Remediation. Each reply is saved so the same prompt is not sent again. A hospital with no linked breach, product, or CVE is not sent to the model.
+
+## Stack
+
+| Piece | Choice |
+| --- | --- |
+| Store | Postgres 16 + TimescaleDB (`docker compose`) |
+| Schema | [`migrations/`](migrations), applied by `vulnrx-models` |
+| Ingest | [`vulnrx-etl`](crates/etl) |
+| Serve | [`vulnrx-api`](crates/api) — Axum, Askama, HTMX |
+
+## Load data
+
+[`vulnrx-etl`](crates/etl) writes a row only when a public source names the entities being linked. `--state` limits `hospitals`, `pi`, `pi-2024`, and `breaches` to one USPS code.
 
 ```bash
 cargo run -p vulnrx-etl -- hospitals
@@ -40,31 +70,41 @@ cargo run -p vulnrx-etl -- advisories
 cargo run -p vulnrx-etl -- fda
 cargo run -p vulnrx-etl -- edgar
 cargo run -p vulnrx-etl -- score
-cargo run -p vulnrx-etl -- shodan
-cargo run -p vulnrx-etl -- censys
 cargo run -p vulnrx-etl -- exposure
-cargo run -p vulnrx-etl -- zoomeye
-cargo run -p vulnrx-etl -- netlas
 cargo run -p vulnrx-etl -- fallback
 ```
 
-`hospitals` loads every Medicare-registered hospital and does not invent vendor links. `pi` loads the 2023 ONC file that already joins each hospital to CHPL products. `pi-2024` stores the newer bundle id CMS published for each hospital. `expand-cehrt` asks CHPL which products are inside those ids; it requires `CHPL_API_KEY` from `.env.example`. `expand-cehrt --missing` retries only ids that still have no product link, and a 404 stays unlinked. `breaches` reads the HHS OCR breach portal. A healthcare provider is linked to a hospital only when the normalized name and state match exactly one facility. `kev` loads CISA's known-exploited catalog with EPSS and CVSS, and links a CVE to a product only when the catalog names that vendor and product. `edgar` loads 8-K Item 1.05 incident reports from December 2023 through today, and 10-K Item 1C cybersecurity disclosures filed since 2024 by hospital operators, nursing facilities, health plans, and medical-device companies. `edgar --sic 8062` loads one industry code and keeps a page only when the result carries that code. Each summary is an excerpt of the filing. `shodan` is optional and only works on a paid Shodan membership; a free key is refused and nothing is stored. `censys` queries that same kind of index when `CENSYS_ORGANIZATION_ID` is set. Free Censys accounts do not have an organization id. `zoomeye` and `netlas` are the free search indexes; put `ZOOMEYE_API_KEY` and `NETLAS_API_KEY` in `.env`. `exposure` runs whichever of those keys is set. When neither key is set, or both searches are refused, it uses crt.sh and then Shodan InternetDB. That fallback stores a row only when one certificate names one hospital and one CPE names one product already linked to that hospital. `fallback` runs that path on its own. The default is 20 queries and the maximum is 50. A hit is stored only when the result names that product. Host addresses are not stored. `cve` asks NVD for CVEs whose record contains the stored product name as an exact phrase, or whose official CPE title does, and whose CPE vendor matches that product's vendor. A one-word name is searched only when it contains a digit or a capital after the first letter, and every word of a multi-word name must be at least four letters, so an ordinary word is not treated as a product. `cve-list` reads the CVE Project baseline and links a product only when that record's vendor and product fields, or its CPE, name the stored product. `n/a` is not a name. `advisories` reads CISA CSAF advisories and links a product only when the advisory's product tree names that vendor and product. `fda` reads FDA cybersecurity safety communications and links a product only when that same notice names the product, its vendor, and a CVE id. `score` writes a hospital rollup only for facilities with a linked breach, Item 1.05 filing, product CVE, or exposure. A component with no linked input is stored as 0 and left out of the average; `method` names the inputs that were used. `--state` limits `hospitals`, `pi`, `pi-2024`, and `breaches` to one USPS code. Explain on a CVE calls Gemini 3.5 Flash-Lite once, with thinking off, and saves the reply. Ask on the map does the same for one question, and only after the stored records name a hospital or CVE. Remediation on a hospital page does the same from that hospital's linked records. A hospital with no linked breach, product, or CVE is not sent to the model.
-
-## API
-
-[`vulnrx-api`](crates/api) reads the store. It does not invent rows for hospitals that have no linked record.
+Optional paid or keyed indexes (see [`.env.example`](.env.example)):
 
 ```bash
-cargo run -p vulnrx-api
+cargo run -p vulnrx-etl -- shodan
+cargo run -p vulnrx-etl -- censys
+cargo run -p vulnrx-etl -- zoomeye
+cargo run -p vulnrx-etl -- netlas
 ```
 
-Open `http://127.0.0.1:8080` for the landing page. `/dashboard` is the US map and the hospital search. `/kev` is CISA's known-exploited catalog, with the vendor and product CISA named. A row there is not a claim that a hospital runs that product. `BIND_ADDR` defaults to `127.0.0.1:8080`. The ticker lists linked OCR breaches and Item 1.05 filings only. A state is filled by how many hospitals there have a linked HHS OCR breach. A green outline means that state is in the registry and has no linked breach. A green dot is a hospital whose certified product is named in a CVE record; the dot links to that hospital. The state card lists every hospital in that registry, with the certified vendors when a public source named them. A score component that was not an input is labeled that way.
+### Source notes
 
-Shodan search, Censys search, and ZoomEye credits are paid. That paywall was a development constraint: exposure rows exist only where a free index, or a certificate plus Shodan InternetDB, names a product already stored. CVE rows exist only where NVD, the CVE List, a CISA advisory, or an FDA notice names that same product. EpicCare, MEDITECH Expanse, and Oracle Health Millennium are certified widely and are not those names, so most hospitals have a vendor stack without a CVE.
+- **hospitals** — every Medicare-registered hospital; no invented vendor links.
+- **pi / pi-2024** — ONC/CMS promoting-interoperability files that join hospitals to CHPL products or 2024 CEHRT bundle ids.
+- **expand-cehrt** — CHPL API unpack of those bundle ids (`CHPL_API_KEY`). `expand-cehrt --missing` retries only ids still without a product link; a 404 stays unlinked.
+- **breaches** — HHS OCR breach portal. A provider links to a hospital only when normalized name and state match exactly one facility.
+- **kev** — CISA KEV with EPSS/CVSS. A CVE links to a product only when the catalog names that vendor and product.
+- **cve / cve-list** — NVD exact-phrase / CPE title matches, and the CVE Project baseline. Ordinary dictionary words are not treated as product names.
+- **advisories / fda** — CISA CSAF and FDA safety communications; link only when the notice names the product (and for FDA, a CVE id).
+- **edgar** — 8-K Item 1.05 and 10-K Item 1C excerpts. `edgar --sic 8062` loads one industry code and keeps a page only when the result carries that code.
+- **exposure / fallback** — ZoomEye/Netlas when keyed; otherwise crt.sh then Shodan InternetDB. A hit stores only when a certificate names one hospital and a CPE names one product already linked to that hospital. Host addresses are not stored. Default 20 queries, max 50.
+- **score** — hospital rollup only when a linked breach, Item 1.05 filing, product CVE, or exposure exists. Unused components store as 0 and stay out of the average; `method` names the inputs used.
 
-- `GET /api/hospitals/search?q=` matches name, display name, alias, or CCN
-- `GET /api/hospitals/{id}` returns the facility, vendor links, CEHRT ids, breaches, filings, exposures, and the latest rollup
-- `GET /api/hospitals/{id}/vulnerabilities` returns CVEs linked to that hospital's products. `product_count` is the stack size when the CVE list is empty
-- `GET /api/vendors/{id}` returns the vendor, its products, and every hospital a public source links to it
-- `GET /api/incidents/recent` returns linked OCR breaches and Item 1.05 filings, newest first
-- `GET /api/kev` returns CISA's known-exploited catalog. `vendor` and `product` are the catalog strings
+Shodan search, Censys search, and ZoomEye credits are paid. That paywall shaped coverage: exposure rows exist only where a free index, or a certificate plus InternetDB, names a product already stored. CVE rows exist only where NVD, the CVE List, a CISA advisory, or an FDA notice names that same product. EpicCare, MEDITECH Expanse, and Oracle Health Millennium are certified widely and are not those catalog names, so most hospitals show a vendor stack without a CVE.
+
+## HTTP API
+
+The API reads the store. It does not invent rows for hospitals with no linked record.
+
+- `GET /api/hospitals/search?q=` — name, display name, alias, or CCN
+- `GET /api/hospitals/{id}` — facility, vendors, CEHRT ids, breaches, filings, exposures, latest rollup
+- `GET /api/hospitals/{id}/vulnerabilities` — CVEs for that hospital's products (`product_count` when the list is empty)
+- `GET /api/vendors/{id}` — vendor, products, linked hospitals
+- `GET /api/incidents/recent` — linked OCR breaches and Item 1.05 filings, newest first
+- `GET /api/kev` — CISA known-exploited catalog (`vendor` / `product` are catalog strings)
