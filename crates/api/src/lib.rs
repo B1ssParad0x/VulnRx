@@ -5,6 +5,7 @@
 
 mod error;
 mod explain;
+mod guide;
 mod hospitals;
 mod incidents;
 mod kev;
@@ -45,6 +46,8 @@ pub fn router(pool: PgPool) -> Router {
         .route("/api/kev", get(kev::catalog))
         .route("/api/cves/{id}/explain", post(explain::json))
         .route("/cves/{id}/explain", post(explain::fragment))
+        .route("/ask", post(guide::ask))
+        .route("/hospitals/{id}/remediate", post(guide::remediate))
         .fallback(unknown_route)
         .with_state(pool)
 }

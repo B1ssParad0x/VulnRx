@@ -20,6 +20,8 @@
         <p class="score-num quiet">none</p>
         {% endif %}
         <p class="note">{{ score_note }}</p>
+        <button class="explain" type="button" hx-post="/hospitals/{{ id }}/remediate" hx-target="#guidance" hx-swap="innerHTML" hx-disabled-elt="this">Remediation</button>
+        <div id="guidance"></div>
         {% if score_present %}
         <dl class="components">
           <div><dt>breach</dt><dd>{{ score_breach }}</dd></div>
@@ -111,7 +113,7 @@
     <section class="stack">
       <h2>Exposure</h2>
       {% if exposures.is_empty() %}
-      <p class="empty">No Shodan or Censys index hit is stored for this hospital.</p>
+      <p class="empty">No exposure index hit is stored for this hospital.</p>
       {% else %}
       <ul class="cards">
         {% for row in exposures %}

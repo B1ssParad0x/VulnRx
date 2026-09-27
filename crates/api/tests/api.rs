@@ -151,6 +151,7 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
     assert_eq!(dash.status, StatusCode::OK);
     assert!(dash.body.contains("state=AL"));
     assert!(dash.body.contains("linked HHS OCR breach"));
+    assert!(dash.body.contains("Ask the records"));
     let alabama = call_text(&pool, "/dashboard?state=AL").await;
     assert!(alabama.body.contains("Alabama"));
     assert!(alabama.body.contains("1 hospital"));
@@ -172,6 +173,7 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
     let page = call_text(&pool, &format!("/hospitals/{hospital_id}")).await;
     assert_eq!(page.status, StatusCode::OK);
     assert!(page.body.contains("Example EHR"));
+    assert!(page.body.contains("Remediation"));
     assert!(page.body.contains("not an input"));
     assert!(page.body.contains("10-K Item 1C"));
     assert!(page.body.contains("Hacking/IT Incident"));
@@ -215,6 +217,25 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
     assert_eq!(explained.status, StatusCode::OK);
     assert!(explained.body.contains("Stored guidance for the test."));
     let missing_cve = call_method(&pool, "POST", "/cves/CVE-1999-0001/explain").await;
+    let unmatched = post_form(&pool, "/ask", "q=zzznomatch").await;
+    assert_eq!(unmatched.status, StatusCode::OK);
+    assert!(unmatched.body.contains("do not name a hospital or CVE"));
+    let short_ask = post_form(&pool, "/ask", "q=tiny").await;
+    assert_eq!(short_ask.status, StatusCode::BAD_REQUEST);
+    let alaska_id: Uuid = sqlx::query_scalar(
+        "SELECT id FROM hospitals WHERE name = 'ALASKA NATIVE MEDICAL CENTER'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let empty_guide = call_method(
+        &pool,
+        "POST",
+        &format!("/hospitals/{alaska_id}/remediate"),
+    )
+    .await;
+    assert_eq!(empty_guide.status, StatusCode::OK);
+    assert!(empty_guide.body.contains("no linked breach"));
     assert_eq!(missing_cve.status, StatusCode::NOT_FOUND);
     assert!(missing_page.body.contains("Hospital not found"));
 
@@ -233,6 +254,26 @@ struct Call {
 struct TextCall {
     status: StatusCode,
     body: String,
+}
+
+async fn post_form(pool: &sqlx::PgPool, uri: &str, body: &str) -> TextCall {
+    let response = vulnrx_api::router(pool.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    TextCall {
+        status,
+        body: String::from_utf8(bytes.to_vec()).unwrap(),
+    }
 }
 
 async fn call_method(pool: &sqlx::PgPool, method: &str, uri: &str) -> TextCall {

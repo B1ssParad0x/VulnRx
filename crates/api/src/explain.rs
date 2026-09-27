@@ -100,7 +100,13 @@ async fn lookup_or_generate(pool: &PgPool, cve_id: &str) -> Result<(String, bool
             "GEMINI_API_KEY is not set, so this CVE has no saved explanation",
         ));
     };
-    let text = generate(&key, &prompt(&facts)).await?;
+    let text = complete(
+        &key,
+        "You explain one public vulnerability record to a hospital administrator. Three sentences maximum. No security jargon. Do not describe exploit steps, payloads, or how to attack a system. This is guidance, not an assessment.",
+        &prompt(&facts),
+        MAX_OUTPUT_TOKENS,
+    )
+    .await?;
     sqlx::query(
         "INSERT INTO cve_explanations (cve_id, model, explanation)
          VALUES ($1, $2, $3)
@@ -213,7 +219,12 @@ fn truncate_chars(text: &str, max: usize) -> String {
     text.chars().take(max).collect()
 }
 
-async fn generate(key: &str, prompt: &str) -> Result<String, ApiError> {
+pub(crate) async fn complete(
+    key: &str,
+    system: &str,
+    prompt: &str,
+    max_tokens: u32,
+) -> Result<String, ApiError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -224,7 +235,7 @@ async fn generate(key: &str, prompt: &str) -> Result<String, ApiError> {
     let body = serde_json::json!({
         "systemInstruction": {
             "parts": [{
-                "text": "You explain one public vulnerability record to a hospital administrator. Three sentences maximum. No security jargon. Do not describe exploit steps, payloads, or how to attack a system. This is guidance, not an assessment."
+                "text": system
             }]
         },
         "contents": [{
@@ -232,7 +243,7 @@ async fn generate(key: &str, prompt: &str) -> Result<String, ApiError> {
             "parts": [{ "text": prompt }]
         }],
         "generationConfig": {
-            "maxOutputTokens": MAX_OUTPUT_TOKENS,
+            "maxOutputTokens": max_tokens,
             "temperature": 0.2
         }
     });
@@ -281,7 +292,7 @@ fn reply_text(body: &Value) -> Option<String> {
     }
 }
 
-fn escape(text: &str) -> String {
+pub(crate) fn escape(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")

@@ -31,6 +31,12 @@
       </aside>
       {% endif %}
     </div>
+    <form class="ask" action="/ask" method="post" hx-post="/ask" hx-target="#answer" hx-swap="innerHTML">
+      <label class="sr" for="ask">Ask the records</label>
+      <input id="ask" name="q" type="text" maxlength="180" placeholder="Ask the records about a hospital" autocomplete="off">
+      <button type="submit">Ask</button>
+    </form>
+    <div id="answer"></div>
     <form class="dock" action="/dashboard" method="get" role="search">
       <p class="map-note">Color is how many hospitals in that state have a linked HHS OCR breach. Alaska and Hawaii are inset.</p>
       {% if selected != "" %}<input type="hidden" name="state" value="{{ selected }}">{% endif %}

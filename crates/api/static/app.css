@@ -556,6 +556,29 @@ main.landing {
   font-size: 0.75rem;
 }
 
+.ask {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.35rem 1.25rem 0;
+}
+.ask input {
+  flex: 1;
+  background: #10150f;
+  color: var(--text);
+  border: 1px solid var(--line);
+  padding: 0.45rem 0.6rem;
+}
+.ask button {
+  background: transparent;
+  color: var(--orange);
+  border: 1px solid var(--orange-dim);
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  letter-spacing: 0.06em;
+}
+#answer { padding: 0 1.25rem; }
+
 .dock {
   position: relative;
   padding: 0.4rem 1.25rem 1rem;

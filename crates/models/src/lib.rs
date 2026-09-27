@@ -24,6 +24,7 @@ pub use vuln::{Cve, ProductCveMap};
 /// `0007_cve_explanations.sql` stores one Gemini reply per CVE.
 /// `0008_gemini_model.sql` names the Flash-Lite model new projects can call.
 /// `0009_exposure_sources.sql` allows ZoomEye, Netlas, and InternetDB hits.
+/// `0010_guidance.sql` stores one natural-language answer and one remediation note.
 pub async fn migrate(pool: &sqlx::PgPool) -> Result<(), sqlx::migrate::MigrateError> {
     sqlx::migrate!("../../migrations").run(pool).await
 }

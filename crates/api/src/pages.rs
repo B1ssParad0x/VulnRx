@@ -67,6 +67,7 @@ struct ResultsPage {
 struct HospitalPage {
     title: String,
     incidents: Vec<IncidentCard>,
+    id: String,
     label: String,
     place: String,
     ccn: String,
@@ -365,6 +366,7 @@ pub(crate) async fn hospital(
     Ok(render(
         HospitalPage {
             title: format!("{} · VulnRx", profile.hospital.label),
+            id: hospital.id.to_string(),
             label: profile.hospital.label.clone(),
             place: location(
                 hospital.address.as_deref(),
