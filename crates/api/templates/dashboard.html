@@ -10,9 +10,16 @@
   <div class="dash">
     {% include "top.html" %}
     <div class="map-stage">
-      <svg class="us-map" viewBox="0 0 959 593" role="img" aria-label="United States. Fill shows hospitals with a linked breach. A green outline means the state is in the registry and has no linked breach.">
+      <svg class="us-map" viewBox="0 0 959 593" role="img" aria-label="United States. Fill shows hospitals with a linked breach. A green outline means the state is in the registry and has no linked breach. A green dot is a hospital whose certified product is named in a CVE record.">
         <style>{{ map_style|safe }}</style>
         {% include "us_map.html" %}
+        <g class="cve-nodes">
+          {% for pin in cve_pins %}
+          <a href="/hospitals/{{ pin.id }}">
+            <circle cx="{{ pin.x }}" cy="{{ pin.y }}" r="4.5"><title>{{ pin.name }}</title></circle>
+          </a>
+          {% endfor %}
+        </g>
       </svg>
       {% if selected != "" %}
       <aside class="state-card">
@@ -38,7 +45,7 @@
     </form>
     <div id="answer"></div>
     <form class="dock" action="/dashboard" method="get" role="search">
-      <p class="map-note">Fill is how many hospitals have a linked HHS OCR breach. A green outline means the state is in the registry and has no linked breach. Alaska and Hawaii are inset.</p>
+      <p class="map-note">Fill is how many hospitals have a linked HHS OCR breach. A green outline means the state is in the registry and has no linked breach. A green dot is a hospital whose certified product is named in a CVE record. Alaska and Hawaii are inset.</p>
       {% if selected != "" %}<input type="hidden" name="state" value="{{ selected }}">{% endif %}
       <label class="sr" for="q">Hospital name or CCN</label>
       <div id="results">

@@ -503,6 +503,18 @@ main.landing {
   stroke-width: 2;
 }
 
+.us-map .cve-nodes circle {
+  fill: #c6f54a;
+  stroke: #0c100e;
+  stroke-width: 1.2;
+}
+
+.us-map .cve-nodes a:hover circle,
+.us-map .cve-nodes a:focus circle {
+  fill: #ff6a1a;
+  stroke: #c6f54a;
+}
+
 .us-map path[class*="-"],
 .us-map .separator1 {
   fill: none;

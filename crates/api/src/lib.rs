@@ -9,6 +9,7 @@ mod guide;
 mod hospitals;
 mod incidents;
 mod kev;
+mod map_pins;
 mod pages;
 mod vendors;
 

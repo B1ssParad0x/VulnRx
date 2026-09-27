@@ -154,6 +154,9 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
     assert!(dash.body.contains("green outline"));
     assert!(dash.body.contains(".us-map .ak { fill: #172018; stroke: #8fb84a;"));
     assert!(dash.body.contains("Ask the records"));
+    assert!(dash.body.contains("cve-nodes"));
+    assert!(dash.body.contains(&format!("/hospitals/{hospital_id}")));
+    assert!(dash.body.contains("named in a CVE record"));
     let alabama = call_text(&pool, "/dashboard?state=AL").await;
     assert!(alabama.body.contains("Alabama"));
     assert!(alabama.body.contains("1 hospital"));

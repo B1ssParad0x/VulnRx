@@ -52,6 +52,7 @@ struct DashboardPage {
     hospital_count: String,
     breach_count: String,
     state_hospitals: Vec<StateHospital>,
+    cve_pins: Vec<crate::map_pins::MapPin>,
 }
 
 #[derive(Template)]
@@ -268,6 +269,7 @@ pub(crate) async fn dashboard(
             hospital_count,
             breach_count,
             state_hospitals,
+            cve_pins: cve_pins(&pool).await?,
         },
         StatusCode::OK,
     ))
@@ -611,6 +613,39 @@ async fn state_counts(pool: &PgPool) -> Result<HashMap<String, (i64, i64)>, ApiE
         .into_iter()
         .map(|row| (row.state, (row.hospitals, row.with_breach)))
         .collect())
+}
+
+async fn cve_pins(pool: &PgPool) -> Result<Vec<crate::map_pins::MapPin>, ApiError> {
+    let rows = sqlx::query_as::<_, CveHospital>(
+        "SELECT DISTINCT h.id, h.name, h.state, h.city
+         FROM hospitals h
+         JOIN hospital_vendor_map m ON m.hospital_id = h.id
+         JOIN product_cve_map pcm ON pcm.product_id = m.product_id
+         WHERE h.state IS NOT NULL
+         ORDER BY h.name",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            let (x, y) = crate::map_pins::pin_position(row.state.as_deref()?, row.city.as_deref())?;
+            Some(crate::map_pins::MapPin {
+                id: row.id.to_string(),
+                name: row.name,
+                x: format!("{x:.1}"),
+                y: format!("{y:.1}"),
+            })
+        })
+        .collect())
+}
+
+#[derive(sqlx::FromRow)]
+struct CveHospital {
+    id: Uuid,
+    name: String,
+    state: Option<String>,
+    city: Option<String>,
 }
 
 async fn state_hospitals(pool: &PgPool, state: &str) -> Result<Vec<StateHospital>, ApiError> {
