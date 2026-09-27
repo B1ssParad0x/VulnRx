@@ -173,6 +173,25 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
     let vendor_page = call_text(&pool, &format!("/vendors/{vendor_id}")).await;
     assert!(vendor_page.body.contains("Example EHR"));
     assert!(vendor_page.body.contains("SOUTHEAST HEALTH MEDICAL CENTER"));
+    assert!(!page.body.contains("NetScaler"));
+
+    let kev_page = call_text(&pool, "/kev").await;
+    assert_eq!(kev_page.status, StatusCode::OK);
+    assert!(kev_page.body.contains("not a claim that a hospital"));
+    assert!(kev_page.body.contains("Citrix · NetScaler"));
+    assert!(kev_page.body.contains("CVE-2024-12345"));
+    assert!(!kev_page.body.contains("CVE-2020-1111"));
+    let kev_next = call_text(&pool, "/kev?page=2").await;
+    assert_eq!(kev_next.status, StatusCode::OK);
+    assert!(!kev_next.body.contains("NetScaler"));
+    let kev_bad = call(&pool, "/kev?page=nope").await;
+    assert_eq!(kev_bad.status, StatusCode::BAD_REQUEST);
+    let kev = call(&pool, "/api/kev").await;
+    assert_eq!(kev.status, StatusCode::OK);
+    assert_eq!(kev.json["total"], 1);
+    assert_eq!(kev.json["entries"][0]["vendor"], "Citrix");
+    assert_eq!(kev.json["entries"][0]["product"], "NetScaler");
+    assert_eq!(kev.json["source"], "cisa_kev");
     let missing_page = call_text(&pool, &format!("/hospitals/{}", Uuid::nil())).await;
     assert_eq!(missing_page.status, StatusCode::NOT_FOUND);
 
@@ -294,8 +313,9 @@ async fn seed(pool: &sqlx::PgPool) {
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO cves (cve_id, description, cvss_score, epss_score, is_kev)
-         VALUES ('CVE-2024-12345', 'Example', 9.0, 0.50000, TRUE)",
+        "INSERT INTO cves (cve_id, description, cvss_score, epss_score, is_kev, published_date, kev_vendor, kev_product)
+         VALUES ('CVE-2024-12345', 'Example', 9.0, 0.50000, TRUE, DATE '2024-04-12', 'Citrix', 'NetScaler'),
+                ('CVE-2020-1111', 'Not in the catalog', NULL, NULL, FALSE, NULL, NULL, NULL)",
     )
     .execute(pool)
     .await

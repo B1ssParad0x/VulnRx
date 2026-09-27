@@ -7,6 +7,7 @@ mod error;
 mod explain;
 mod hospitals;
 mod incidents;
+mod kev;
 mod pages;
 mod vendors;
 
@@ -24,6 +25,7 @@ pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route("/", get(pages::home))
         .route("/dashboard", get(pages::dashboard))
+        .route("/kev", get(pages::kev))
         .route("/search", get(pages::search_results))
         .route("/hospitals/{id}", get(pages::hospital))
         .route("/vendors/{id}", get(pages::vendor))
@@ -39,6 +41,7 @@ pub fn router(pool: PgPool) -> Router {
         )
         .route("/api/vendors/{id}", get(vendors::profile))
         .route("/api/incidents/recent", get(incidents::recent))
+        .route("/api/kev", get(kev::catalog))
         .route("/api/cves/{id}/explain", post(explain::json))
         .route("/cves/{id}/explain", post(explain::fragment))
         .fallback(unknown_route)

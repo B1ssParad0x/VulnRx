@@ -337,6 +337,17 @@ input[type="search"]:focus { border-bottom-color: var(--green); }
 
 .cves { list-style: none; padding: 0; margin: 0.6rem 0 0; display: grid; gap: 0.75rem; }
 
+.catalog { list-style: none; padding: 0; margin: 1rem 0 0; display: grid; gap: 0.65rem; }
+.catalog li { border: 1px solid var(--line); padding: 0.75rem 0.9rem; }
+.catalog p { margin: 0.2rem 0; }
+.cve-id, .who {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  letter-spacing: 0.04em;
+}
+.who { color: var(--orange); }
+.pager { display: flex; gap: 1rem; margin-top: 1rem; }
+.pager:empty { display: none; }
+
 footer {
   width: min(1080px, calc(100% - 2rem));
   margin: 0 auto 2rem;

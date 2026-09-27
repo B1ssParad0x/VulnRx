@@ -99,11 +99,29 @@ struct VendorPage {
 }
 
 #[derive(Template)]
+#[template(path = "kev.html")]
+struct KevPage {
+    title: String,
+    incidents: Vec<IncidentCard>,
+    range: String,
+    prev: String,
+    next: String,
+    entries: Vec<KevRow>,
+}
+
+#[derive(Template)]
 #[template(path = "missing.html")]
 struct MissingPage {
     title: String,
     heading: String,
     incidents: Vec<IncidentCard>,
+}
+
+struct KevRow {
+    cve_id: String,
+    named: String,
+    description: String,
+    scores: String,
 }
 
 struct Hit {
@@ -238,6 +256,77 @@ pub(crate) async fn dashboard(
         },
         StatusCode::OK,
     ))
+}
+
+pub(crate) async fn kev(
+    State(pool): State<PgPool>,
+    Query(query): Query<crate::kev::CatalogQuery>,
+) -> Result<Response, ApiError> {
+    let page = error::parse_page(query.page_raw())?;
+    let (total, entries) = crate::kev::load(&pool, page).await?;
+    let shown = entries.len() as i64;
+    let offset = page
+        .checked_sub(1)
+        .and_then(|value| value.checked_mul(crate::kev::PAGE_SIZE))
+        .unwrap_or(0);
+    let range = if total == 0 {
+        "0 entries in the stored catalog".to_string()
+    } else if shown == 0 {
+        format!("page {} of {}", page, grouped(total))
+    } else {
+        format!(
+            "{}–{} of {}",
+            grouped(offset + 1),
+            grouped(offset + shown),
+            grouped(total)
+        )
+    };
+    let prev = if page > 1 {
+        format!("/kev?page={}", page - 1)
+    } else {
+        String::new()
+    };
+    let next = if offset + shown < total {
+        format!("/kev?page={}", page + 1)
+    } else {
+        String::new()
+    };
+    Ok(render(
+        KevPage {
+            title: "Known exploited · VulnRx".to_string(),
+            incidents: ticker(&pool).await?,
+            range,
+            prev,
+            next,
+            entries: entries.into_iter().map(kev_row).collect(),
+        },
+        StatusCode::OK,
+    ))
+}
+
+fn kev_row(entry: crate::kev::CatalogEntry) -> KevRow {
+    let named = match (entry.vendor, entry.product) {
+        (Some(vendor), Some(product)) => format!("{vendor} · {product}"),
+        (Some(vendor), None) => vendor,
+        (None, Some(product)) => product,
+        (None, None) => String::new(),
+    };
+    let mut scores = Vec::new();
+    if let Some(date) = entry.published_date {
+        scores.push(date.to_string());
+    }
+    if let Some(cvss) = entry.cvss_score {
+        scores.push(format!("CVSS {cvss}"));
+    }
+    if let Some(epss) = entry.epss_score {
+        scores.push(format!("EPSS {epss}"));
+    }
+    KevRow {
+        cve_id: entry.cve_id,
+        named,
+        description: entry.description.unwrap_or_default(),
+        scores: scores.join(" · "),
+    }
 }
 
 pub(crate) async fn search_results(

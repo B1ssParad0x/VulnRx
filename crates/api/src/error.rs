@@ -40,6 +40,19 @@ pub(crate) fn parse_id(raw: &str) -> Result<Uuid, ApiError> {
     Uuid::parse_str(raw).map_err(|_| ApiError::BadRequest("id must be a uuid"))
 }
 
+pub(crate) fn parse_page(raw: Option<&str>) -> Result<i64, ApiError> {
+    let Some(raw) = raw.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(1);
+    };
+    let parsed: i64 = raw
+        .parse()
+        .map_err(|_| ApiError::BadRequest("page must be an integer"))?;
+    if parsed < 1 {
+        return Err(ApiError::BadRequest("page must be at least 1"));
+    }
+    Ok(parsed)
+}
+
 pub(crate) fn parse_limit(raw: Option<&str>, default: i64, max: i64) -> Result<i64, ApiError> {
     let Some(raw) = raw.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(default);

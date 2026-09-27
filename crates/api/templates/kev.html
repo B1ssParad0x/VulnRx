@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  {% include "top.html" %}
+  <main class="profile">
+    <p class="back"><a href="/dashboard">Map</a></p>
+    <section class="panel">
+      <p class="kicker">cisa</p>
+      <h1>Known exploited vulnerabilities</h1>
+      <p class="note">Each row is the vendor and product CISA named in its catalog. A row is not a claim that a hospital in this registry runs that product.</p>
+      <p class="meta">{{ range }}</p>
+      {% if entries.is_empty() %}
+      <p class="empty">No catalog rows on this page.</p>
+      {% else %}
+      <ul class="catalog">
+        {% for entry in entries %}
+        <li>
+          <p class="cve-id">{{ entry.cve_id }}</p>
+          {% if entry.named != "" %}<p class="who">{{ entry.named }}</p>{% endif %}
+          {% if entry.description != "" %}<p>{{ entry.description }}</p>{% endif %}
+          {% if entry.scores != "" %}<p class="meta">{{ entry.scores }}</p>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <p class="pager">
+        {% if prev != "" %}<a href="{{ prev }}">Previous</a>{% endif %}
+        {% if next != "" %}<a href="{{ next }}">Next</a>{% endif %}
+      </p>
+    </section>
+  </main>
+  <script src="/static/htmx.min.js"></script>
+</body>
+</html>

@@ -51,10 +51,11 @@ cargo run -p vulnrx-etl -- censys
 cargo run -p vulnrx-api
 ```
 
-Open `http://127.0.0.1:8080` for the landing page. `/dashboard` is the US map and the hospital search. `BIND_ADDR` defaults to `127.0.0.1:8080`. The ticker lists linked OCR breaches and Item 1.05 filings only. A state is colored by how many hospitals there have a linked HHS OCR breach. A score component that was not an input is labeled that way.
+Open `http://127.0.0.1:8080` for the landing page. `/dashboard` is the US map and the hospital search. `/kev` is CISA's known-exploited catalog, with the vendor and product CISA named. A row there is not a claim that a hospital runs that product. `BIND_ADDR` defaults to `127.0.0.1:8080`. The ticker lists linked OCR breaches and Item 1.05 filings only. A state is colored by how many hospitals there have a linked HHS OCR breach. A score component that was not an input is labeled that way.
 
 - `GET /api/hospitals/search?q=` matches name, display name, alias, or CCN
 - `GET /api/hospitals/{id}` returns the facility, vendor links, CEHRT ids, breaches, filings, exposures, and the latest rollup
 - `GET /api/hospitals/{id}/vulnerabilities` returns CVEs linked to that hospital's products. `product_count` is the stack size when the CVE list is empty
 - `GET /api/vendors/{id}` returns the vendor, its products, and every hospital a public source links to it
 - `GET /api/incidents/recent` returns linked OCR breaches and Item 1.05 filings, newest first
+- `GET /api/kev` returns CISA's known-exploited catalog. `vendor` and `product` are the catalog strings
