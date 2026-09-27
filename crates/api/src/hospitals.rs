@@ -326,6 +326,13 @@ const EXPOSURES_SQL: &str = "
 SELECT e.id, e.hospital_id, e.product_id, e.exposed_service, e.source, e.last_seen, e.raw_reference
 FROM exposures e
 WHERE e.hospital_id = $1
+   OR (
+     e.hospital_id IS NULL
+     AND e.product_id IN (
+       SELECT product_id FROM hospital_vendor_map
+       WHERE hospital_id = $1 AND product_id IS NOT NULL
+     )
+   )
 ORDER BY e.last_seen DESC NULLS LAST, e.id
 ";
 

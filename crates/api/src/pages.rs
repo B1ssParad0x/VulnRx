@@ -83,6 +83,7 @@ struct HospitalPage {
     vendors: Vec<VendorCard>,
     timeline: Vec<TimelineRow>,
     cve_note: String,
+    checked_products: Vec<String>,
     cves: Vec<CveRow>,
     exposures: Vec<ExposureRow>,
     cehrt: Vec<CehrtRow>,
@@ -401,6 +402,7 @@ pub(crate) async fn hospital(
                 .collect(),
             timeline: timeline(&profile),
             cve_note: cve_note(vulns.product_count, vulns.vulnerabilities.len()),
+            checked_products: checked_product_names(&profile.vendors),
             cves: {
                 let ids: Vec<String> = vulns
                     .vulnerabilities
@@ -425,17 +427,21 @@ pub(crate) async fn hospital(
                     })
                     .collect()
             },
-            exposures: profile
-                .exposures
-                .iter()
-                .map(|row| ExposureRow {
-                    service: row
-                        .exposed_service
-                        .clone()
-                        .unwrap_or_else(|| "index hit".to_string()),
-                    meta: exposure_meta(row),
-                })
-                .collect(),
+            exposures: {
+                let names = product_names(&pool, &profile.exposures).await?;
+                profile
+                    .exposures
+                    .iter()
+                    .map(|row| ExposureRow {
+                        service: row
+                            .product_id
+                            .and_then(|id| names.get(&id).cloned())
+                            .or_else(|| row.exposed_service.clone())
+                            .unwrap_or_else(|| "index hit".to_string()),
+                        meta: exposure_meta(row),
+                    })
+                    .collect()
+            },
             cehrt: profile
                 .cehrt_reports
                 .iter()
@@ -887,10 +893,47 @@ fn cve_note(product_count: i64, vuln_count: usize) -> String {
     if vuln_count == 0 && product_count == 0 {
         "No certified product is linked to this hospital.".to_string()
     } else if vuln_count == 0 {
-        format!("{product_count} certified products are linked. None is linked to a CVE.")
+        format!(
+            "{product_count} certified products were checked against NVD, the CVE List, and CISA. No CVE record uses these names."
+        )
     } else {
         format!("{vuln_count} linked CVE records.")
     }
+}
+
+fn checked_product_names(vendors: &[hospitals::VendorLink]) -> Vec<String> {
+    let mut names: Vec<String> = vendors
+        .iter()
+        .filter_map(|link| link.product_name.clone())
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
+async fn product_names(
+    pool: &PgPool,
+    rows: &[vulnrx_models::Exposure],
+) -> Result<HashMap<Uuid, String>, ApiError> {
+    let ids: Vec<Uuid> = rows.iter().filter_map(|row| row.product_id).collect();
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let found = sqlx::query_as::<_, ProductName>(
+        "SELECT id, name FROM products WHERE id = ANY($1::uuid[])",
+    )
+    .bind(&ids)
+    .fetch_all(pool)
+    .await?;
+    Ok(found.into_iter().map(|row| (row.id, row.name)).collect())
+}
+
+#[derive(sqlx::FromRow)]
+struct ProductName {
+    id: Uuid,
+    name: String,
 }
 
 fn cve_scores(cve: &hospitals::Vulnerability) -> String {
@@ -908,7 +951,11 @@ fn cve_scores(cve: &hospitals::Vulnerability) -> String {
 }
 
 fn exposure_meta(row: &vulnrx_models::Exposure) -> String {
-    let mut parts = vec![source_label(&row.source).to_string()];
+    let source = source_label(&row.source).to_string();
+    if row.hospital_id.is_none() {
+        return format!("{source} · names this certified product, not this hospital's network");
+    }
+    let mut parts = vec![source];
     if let Some(seen) = row.last_seen {
         parts.push(seen.to_string());
     }
