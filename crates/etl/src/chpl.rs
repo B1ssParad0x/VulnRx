@@ -230,20 +230,6 @@ struct ApiProduct {
     name: Option<String>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::bundle_from_body;
-
-    #[test]
-    fn reads_the_vendor_field_chpl_returns() {
-        let body = br#"{"products":[{"id":11453,"name":"EpicCare Inpatient Base","vendor":"Epic Systems Corporation"}]}"#;
-        let bundle = bundle_from_body("0015CFH8CSZ4V7K", body).unwrap();
-        assert_eq!(bundle.products.len(), 1);
-        assert_eq!(bundle.products[0].developer_name, "Epic Systems Corporation");
-        assert_eq!(bundle.products[0].database_id, "11453");
-    }
-}
-
 const CREATE_STAGE: &str = r#"
 CREATE TEMP TABLE cehrt_stage (
     cehrt_id TEXT,
@@ -301,3 +287,17 @@ DO UPDATE SET
     confidence = EXCLUDED.confidence,
     last_verified = GREATEST(hospital_vendor_map.last_verified, EXCLUDED.last_verified)
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::bundle_from_body;
+
+    #[test]
+    fn reads_the_vendor_field_chpl_returns() {
+        let body = br#"{"products":[{"id":11453,"name":"EpicCare Inpatient Base","vendor":"Epic Systems Corporation"}]}"#;
+        let bundle = bundle_from_body("0015CFH8CSZ4V7K", body).unwrap();
+        assert_eq!(bundle.products.len(), 1);
+        assert_eq!(bundle.products[0].developer_name, "Epic Systems Corporation");
+        assert_eq!(bundle.products[0].database_id, "11453");
+    }
+}

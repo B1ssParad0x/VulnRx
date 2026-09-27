@@ -2,6 +2,7 @@
 
 mod breaches;
 mod chpl;
+mod cve_match;
 mod edgar;
 mod hospitals;
 mod index;
@@ -14,6 +15,7 @@ pub use breaches::{
     BREACH_PORTAL_URL, BreachRecord, BreachReport, fetch_breach_portal, ingest_breaches,
 };
 pub use chpl::{BundleProduct, CehrtBundle, ExpandReport, expand_cehrt, link_cehrt_bundles};
+pub use cve_match::{CveMatchReport, match_product_cves};
 pub use edgar::{EdgarFiling, EdgarReport, fetch_item_105_filings, ingest_filings};
 pub use hospitals::{HOSPITAL_REGISTRY_URL, HospitalLoadReport, ingest_hospital_registry};
 pub use index::{IndexReport, query_censys, query_shodan};

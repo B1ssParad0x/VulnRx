@@ -225,7 +225,7 @@ async fn censys_search(
     key: &str,
     query: &str,
 ) -> Result<SearchHit, Stop> {
-    let response = client
+    let mut request = client
         .post("https://api.platform.censys.io/v3/global/search/query")
         .header("Authorization", format!("Bearer {key}"))
         .header("Content-Type", "application/json")
@@ -235,7 +235,15 @@ async fn censys_search(
                 "page_size": 5
             })
             .to_string(),
-        )
+        );
+    if let Some(org) = std::env::var("CENSYS_ORGANIZATION_ID")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        request = request.header("X-Organization-ID", org);
+    }
+    let response = request
         .send()
         .await
         .map_err(|err| Stop::Failed(err.into()))?;

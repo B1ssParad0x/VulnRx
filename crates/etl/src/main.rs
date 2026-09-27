@@ -181,6 +181,14 @@ async fn run() -> Result<ExitCode, vulnrx_etl::IngestError> {
             );
             Ok(ExitCode::SUCCESS)
         }
+        Command::Cve => {
+            let report = vulnrx_etl::match_product_cves(&pool).await?;
+            println!(
+                "nvd cve: checked {} product names, {} products gained a list, {} cves, {} links",
+                report.products_checked, report.products_with_cves, report.cves, report.links
+            );
+            Ok(ExitCode::SUCCESS)
+        }
         Command::Censys { limit } => {
             let report = vulnrx_etl::query_censys(&pool, limit).await?;
             println!(
@@ -224,6 +232,7 @@ enum Command {
     Score,
     Shodan { limit: Option<i64> },
     Censys { limit: Option<i64> },
+    Cve,
 }
 
 fn parse_args() -> Result<Command, String> {
@@ -267,6 +276,10 @@ fn parse_args() -> Result<Command, String> {
         Some("censys") => {
             raw.remove(0);
             "censys"
+        }
+        Some("cve") => {
+            raw.remove(0);
+            "cve"
         }
         Some("pi") => {
             raw.remove(0);
@@ -350,6 +363,12 @@ fn parse_args() -> Result<Command, String> {
             }
             Command::Censys { limit }
         }
+        "cve" => {
+            if state.is_some() || url.is_some() || limit.is_some() {
+                return Err(usage());
+            }
+            Command::Cve
+        }
         _ => {
             if limit.is_some() {
                 return Err(usage());
@@ -371,6 +390,7 @@ fn usage() -> String {
      vulnrx-etl score\n\
      vulnrx-etl shodan [--limit N]\n\
      vulnrx-etl censys [--limit N]\n\
+     vulnrx-etl cve\n\
      \n\
      pi loads the 2023 ONC file that already joins hospitals to CHPL products.\n\
      hospitals loads every Medicare-registered hospital. It does not invent vendor links.\n\
@@ -380,7 +400,8 @@ fn usage() -> String {
      kev loads the CISA known-exploited catalog, FIRST.org EPSS, and NVD CVSS. A product is linked only when the catalog's vendor and product names match one stored product.\n\
      edgar loads 8-K Item 1.05 incident reports since December 2023 and 10-K Item 1C cybersecurity disclosures filed from 2024 onward for hospital, nursing, health-plan, and medical-device industries. The summary is an excerpt of the filing. SEC requires a contact in the user agent; set SEC_USER_AGENT if the default is rejected.\n\
      score writes a hospital rollup only where a linked breach, Item 1.05 filing, product CVE, or exposure exists. Components with no linked input are stored as 0 and left out of the average. method names the inputs that were used.\n\
-     shodan and censys query an existing public index for stored product names. Default limit is 20 queries, and the maximum is 50. A hit is stored only when the result names that product. Host addresses are not stored.\n\
+     shodan and censys query an existing public index for stored product names. Shodan search requires a paid membership. Censys search needs CENSYS_ORGANIZATION_ID, which free accounts do not have. Default limit is 20 queries, and the maximum is 50. A hit is stored only when the result names that product. Host addresses are not stored.\n\
+     cve asks NVD, using NVD_API_KEY, for vulnerabilities whose description or official CPE title contains the stored product name as an exact phrase. The CPE vendor must match the stored vendor. Requires NVD_API_KEY.\n\
      With no command, pi is used."
         .to_string()
 }
