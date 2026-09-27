@@ -80,6 +80,7 @@ struct HospitalPage {
     score_breach: String,
     score_cve: String,
     score_exposure: String,
+    score_history: Vec<ScorePoint>,
     vendors: Vec<VendorCard>,
     timeline: Vec<TimelineRow>,
     cve_note: String,
@@ -156,6 +157,12 @@ struct TimelineRow {
     body: String,
     source_label: String,
     source_href: String,
+}
+
+struct ScorePoint {
+    when: String,
+    score: String,
+    method: String,
 }
 
 struct CveRow {
@@ -364,6 +371,7 @@ pub(crate) async fn hospital(
         Err(err) => return Err(err),
     };
     let vulns = hospitals::load_vulnerabilities(&pool, id).await?;
+    let history = hospitals::score_history(&pool, id).await?;
     let incidents = ticker(&pool).await?;
     let hospital = &profile.hospital.hospital;
     let (score_present, score_value, score_width, score_note, score_breach, score_cve, score_exposure) =
@@ -394,6 +402,14 @@ pub(crate) async fn hospital(
             score_breach,
             score_cve,
             score_exposure,
+            score_history: history
+                .iter()
+                .map(|row| ScorePoint {
+                    when: row.computed_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+                    score: row.composite_score.to_string(),
+                    method: row.method.clone(),
+                })
+                .collect(),
             vendors: profile
                 .vendors
                 .iter()

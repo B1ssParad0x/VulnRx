@@ -177,6 +177,9 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
     assert!(page.body.contains("Example EHR"));
     assert!(page.body.contains("Remediation"));
     assert!(page.body.contains("not an input"));
+    assert!(page.body.contains("stored rollups"));
+    assert!(page.body.contains("v1:breach"));
+    assert!(page.body.contains("Ask the records"));
     assert!(page.body.contains("10-K Item 1C"));
     assert!(page.body.contains("Hacking/IT Incident"));
     assert!(page.body.contains("https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"));

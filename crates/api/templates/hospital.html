@@ -29,6 +29,14 @@
           <div><dt>exposure</dt><dd>{{ score_exposure }}</dd></div>
         </dl>
         {% endif %}
+        {% if !score_history.is_empty() %}
+        <p class="kicker">stored rollups</p>
+        <ul class="facts">
+          {% for row in score_history %}
+          <li>{{ row.when }} · {{ row.score }} · {{ row.method }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
       </section>
       <section class="panel">
         <p class="kicker">facility</p>
@@ -148,6 +156,12 @@
       </ul>
       {% endif %}
     </section>
+    <form class="ask" action="/ask" method="post" hx-post="/ask" hx-target="#answer" hx-swap="innerHTML">
+      <label class="sr" for="ask">Ask the records</label>
+      <input id="ask" name="q" type="text" maxlength="180" placeholder="Ask the records about a hospital" autocomplete="off">
+      <button type="submit">Ask</button>
+    </form>
+    <div id="answer"></div>
   </main>
   <footer><p>A stored zero is not shown as a measured risk. Components that were not inputs say so.</p></footer>
   <script src="/static/htmx.min.js"></script>

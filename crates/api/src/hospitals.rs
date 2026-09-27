@@ -281,6 +281,24 @@ FROM hospitals
 WHERE id = $1
 ";
 
+pub(crate) async fn score_history(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<Vec<vulnrx_models::RiskScore>, ApiError> {
+    let rows = sqlx::query_as::<_, vulnrx_models::RiskScore>(
+        "SELECT id, hospital_id, vendor_id, composite_score, breach_component, cve_component,
+                exposure_component, method, computed_at
+         FROM risk_scores
+         WHERE hospital_id = $1 AND vendor_id IS NULL
+         ORDER BY computed_at DESC
+         LIMIT 12",
+    )
+    .bind(id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 const RISK_SQL: &str = "
 SELECT id, hospital_id, vendor_id, composite_score, breach_component, cve_component,
        exposure_component, method, computed_at
