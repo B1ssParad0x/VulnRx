@@ -169,12 +169,6 @@ exposure_hits AS (
     SELECT hospital_id, id
     FROM exposures
     WHERE hospital_id IS NOT NULL
-    UNION
-    SELECT m.hospital_id, e.id
-    FROM exposures e
-    JOIN hospital_vendor_map m ON m.product_id = e.product_id
-    WHERE e.product_id IS NOT NULL
-      AND e.hospital_id IS NULL
 ),
 exposure_scored AS (
     SELECT

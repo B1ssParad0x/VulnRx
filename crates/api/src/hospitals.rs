@@ -323,13 +323,9 @@ ORDER BY filed_date DESC NULLS LAST, filing_type
 ";
 
 const EXPOSURES_SQL: &str = "
-SELECT DISTINCT e.id, e.hospital_id, e.product_id, e.exposed_service, e.source, e.last_seen, e.raw_reference
+SELECT e.id, e.hospital_id, e.product_id, e.exposed_service, e.source, e.last_seen, e.raw_reference
 FROM exposures e
-LEFT JOIN hospital_vendor_map m
-    ON m.product_id = e.product_id
-   AND m.hospital_id = $1
 WHERE e.hospital_id = $1
-   OR (e.hospital_id IS NULL AND m.id IS NOT NULL)
 ORDER BY e.last_seen DESC NULLS LAST, e.id
 ";
 
