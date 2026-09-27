@@ -374,14 +374,32 @@ footer {
   text-decoration: none;
 }
 
-.landing {
+main.landing {
   position: relative;
+  width: 100%;
+  max-width: none;
+  margin: 0;
   min-height: calc(100vh - 7rem);
   display: grid;
   place-items: center;
   padding: 2rem 1.25rem 4rem;
   overflow: hidden;
 }
+
+.scanner {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.scanner canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.landing.has-scanner .signal { display: none; }
 
 .signal {
   position: absolute;
@@ -410,7 +428,17 @@ footer {
 
 .landing-copy {
   position: relative;
+  z-index: 1;
   width: min(740px, 100%);
+}
+
+.landing-copy::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -1.2rem -3vw -2.2rem;
+  background: radial-gradient(closest-side, rgba(7, 8, 6, 0.88), rgba(7, 8, 6, 0.55) 62%, transparent 82%);
+  pointer-events: none;
 }
 
 .landing-copy h1 {
@@ -418,6 +446,12 @@ footer {
   font-size: clamp(2.4rem, 6vw, 4.4rem);
   line-height: 0.95;
   letter-spacing: -0.035em;
+  text-shadow: 0 2px 18px #070806;
+}
+
+.landing-copy .lede {
+  color: var(--text);
+  text-shadow: 0 1px 14px #070806;
 }
 
 .enter {

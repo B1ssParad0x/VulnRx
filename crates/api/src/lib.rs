@@ -31,6 +31,7 @@ pub fn router(pool: PgPool) -> Router {
         .route("/vendors/{id}", get(pages::vendor))
         .route("/static/app.css", get(pages::css))
         .route("/static/htmx.min.js", get(pages::script))
+        .route("/static/scanner.js", get(pages::scanner))
         .route("/favicon.ico", get(pages::favicon))
         .route("/api/health", get(health))
         .route("/api/hospitals/search", get(hospitals::search))

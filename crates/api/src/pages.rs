@@ -515,6 +515,13 @@ pub(crate) async fn script() -> impl IntoResponse {
     )
 }
 
+pub(crate) async fn scanner() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        include_str!("../static/scanner.js"),
+    )
+}
+
 pub(crate) async fn favicon() -> StatusCode {
     StatusCode::NO_CONTENT
 }

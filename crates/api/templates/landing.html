@@ -9,6 +9,7 @@
 <body class="landing-body">
   {% include "top.html" %}
   <main class="landing">
+    <div class="scanner" id="scanner" aria-hidden="true"></div>
     <svg class="signal" viewBox="0 0 1200 640" preserveAspectRatio="none" aria-hidden="true">
       <path class="wave w1" d="M-20 420 C 180 300, 360 540, 600 420 S 980 280, 1220 420" />
       <path class="wave w2" d="M-20 470 C 200 360, 400 590, 640 470 S 1000 340, 1220 470" />
@@ -23,5 +24,6 @@
     </section>
   </main>
   <script src="/static/htmx.min.js"></script>
+  <script src="/static/scanner.js"></script>
 </body>
 </html>

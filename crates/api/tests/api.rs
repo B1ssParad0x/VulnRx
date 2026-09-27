@@ -141,6 +141,7 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
     assert_eq!(home.status, StatusCode::OK);
     assert!(home.body.contains("VULNRX"));
     assert!(home.body.contains("Open the map"));
+    assert!(home.body.contains("/static/scanner.js"));
     assert!(home.body.contains("Mercy Downtown"));
     assert!(home.body.contains("SOUTHEAST HEALTH MEDICAL CENTER"));
     assert!(!home.body.contains("Unlinked Clinic"));
