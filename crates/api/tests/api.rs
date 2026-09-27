@@ -151,6 +151,8 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
     assert_eq!(dash.status, StatusCode::OK);
     assert!(dash.body.contains("state=AL"));
     assert!(dash.body.contains("linked HHS OCR breach"));
+    assert!(dash.body.contains("green outline"));
+    assert!(dash.body.contains(".us-map .ak { fill: #172018; stroke: #8fb84a;"));
     assert!(dash.body.contains("Ask the records"));
     let alabama = call_text(&pool, "/dashboard?state=AL").await;
     assert!(alabama.body.contains("Alabama"));

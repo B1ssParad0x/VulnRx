@@ -658,8 +658,13 @@ fn map_style(counts: &HashMap<String, (i64, i64)>, selected: Option<&str>) -> St
     let mut css = String::new();
     for (code, stats) in counts {
         if code.len() == 2 && code.chars().all(|ch| ch.is_ascii_uppercase()) {
+            let stroke = if stats.0 > 0 && stats.1 == 0 {
+                " stroke: #8fb84a; stroke-width: 1.4px;"
+            } else {
+                ""
+            };
             css.push_str(&format!(
-                ".us-map .{} {{ fill: {}; }}\n",
+                ".us-map .{} {{ fill: {};{stroke} }}\n",
                 code.to_ascii_lowercase(),
                 breach_fill(stats.1)
             ));

@@ -10,7 +10,7 @@
   <div class="dash">
     {% include "top.html" %}
     <div class="map-stage">
-      <svg class="us-map" viewBox="0 0 959 593" role="img" aria-label="United States. Color shows hospitals with a linked breach report.">
+      <svg class="us-map" viewBox="0 0 959 593" role="img" aria-label="United States. Fill shows hospitals with a linked breach. A green outline means the state is in the registry and has no linked breach.">
         <style>{{ map_style|safe }}</style>
         {% include "us_map.html" %}
       </svg>
@@ -38,7 +38,7 @@
     </form>
     <div id="answer"></div>
     <form class="dock" action="/dashboard" method="get" role="search">
-      <p class="map-note">Color is how many hospitals in that state have a linked HHS OCR breach. Alaska and Hawaii are inset.</p>
+      <p class="map-note">Fill is how many hospitals have a linked HHS OCR breach. A green outline means the state is in the registry and has no linked breach. Alaska and Hawaii are inset.</p>
       {% if selected != "" %}<input type="hidden" name="state" value="{{ selected }}">{% endif %}
       <label class="sr" for="q">Hospital name or CCN</label>
       <div id="results">

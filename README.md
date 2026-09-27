@@ -57,7 +57,7 @@ cargo run -p vulnrx-etl -- fallback
 cargo run -p vulnrx-api
 ```
 
-Open `http://127.0.0.1:8080` for the landing page. `/dashboard` is the US map and the hospital search. `/kev` is CISA's known-exploited catalog, with the vendor and product CISA named. A row there is not a claim that a hospital runs that product. `BIND_ADDR` defaults to `127.0.0.1:8080`. The ticker lists linked OCR breaches and Item 1.05 filings only. A state is colored by how many hospitals there have a linked HHS OCR breach. The state card lists every hospital in that registry, with the certified vendors when a public source named them. A score component that was not an input is labeled that way.
+Open `http://127.0.0.1:8080` for the landing page. `/dashboard` is the US map and the hospital search. `/kev` is CISA's known-exploited catalog, with the vendor and product CISA named. A row there is not a claim that a hospital runs that product. `BIND_ADDR` defaults to `127.0.0.1:8080`. The ticker lists linked OCR breaches and Item 1.05 filings only. A state is filled by how many hospitals there have a linked HHS OCR breach. A green outline means that state is in the registry and has no linked breach. The state card lists every hospital in that registry, with the certified vendors when a public source named them. A score component that was not an input is labeled that way.
 
 - `GET /api/hospitals/search?q=` matches name, display name, alias, or CCN
 - `GET /api/hospitals/{id}` returns the facility, vendor links, CEHRT ids, breaches, filings, exposures, and the latest rollup
