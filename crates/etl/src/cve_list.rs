@@ -99,6 +99,9 @@ struct Scan {
 fn scan_zip(path: &Path, by_name: &HashMap<String, Vec<StoredProduct>>) -> Result<Scan, IngestError> {
     let file = std::fs::File::open(path)?;
     let mut archive = zip::ZipArchive::new(file).map_err(|err| IngestError::Portal(err.to_string()))?;
+    if let Some(inner) = unwrap_nested_zip(path, &mut archive)? {
+        return scan_zip(&inner, by_name);
+    }
     let mut scan = Scan {
         records: 0,
         skipped: 0,
@@ -128,6 +131,39 @@ fn scan_zip(path: &Path, by_name: &HashMap<String, Vec<StoredProduct>>) -> Resul
         }
     }
     Ok(scan)
+}
+
+fn unwrap_nested_zip(
+    path: &Path,
+    archive: &mut zip::ZipArchive<std::fs::File>,
+) -> Result<Option<std::path::PathBuf>, IngestError> {
+    let mut nested = None;
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|err| IngestError::Portal(err.to_string()))?;
+        let name = entry.name();
+        if name.ends_with(".json") && name.contains("CVE-") {
+            return Ok(None);
+        }
+        if name.ends_with(".zip") {
+            nested = Some(index);
+        }
+    }
+    let Some(index) = nested else {
+        return Ok(None);
+    };
+    let inner_path = path.with_extension("unpacked.zip");
+    if std::fs::metadata(&inner_path).map(|meta| meta.len() > 50_000_000).unwrap_or(false) {
+        return Ok(Some(inner_path));
+    }
+    let mut entry = archive
+        .by_index(index)
+        .map_err(|err| IngestError::Portal(err.to_string()))?;
+    let mut out = std::fs::File::create(&inner_path)?;
+    std::io::copy(&mut entry, &mut out)?;
+    eprintln!("cve list: unpacked nested zip");
+    Ok(Some(inner_path))
 }
 
 fn index_products(products: Vec<StoredProduct>) -> HashMap<String, Vec<StoredProduct>> {
@@ -286,7 +322,7 @@ fn vendor_matches(product: &StoredProduct, affected_vendor: &str) -> bool {
     product.vendor_keys.iter().any(|token| token == &lowered)
 }
 
-fn vendor_keys(name: &str) -> Vec<String> {
+pub(crate) fn vendor_keys(name: &str) -> Vec<String> {
     let mut keys: Vec<String> = vendor_tokens(name)
         .into_iter()
         .map(|token| token.replace('_', ""))
@@ -302,7 +338,7 @@ fn vendor_keys(name: &str) -> Vec<String> {
     keys
 }
 
-fn name_key(value: &str) -> Option<String> {
+pub(crate) fn name_key(value: &str) -> Option<String> {
     let key: String = value
         .chars()
         .filter(|ch| ch.is_ascii_alphanumeric())
