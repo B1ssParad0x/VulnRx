@@ -163,6 +163,8 @@ struct CveRow {
     scores: String,
     description: String,
     explanation: String,
+    source_href: String,
+    source_label: String,
 }
 
 struct ExposureRow {
@@ -424,6 +426,8 @@ pub(crate) async fn hospital(
                         product: format!("{} · {}", cve.vendor_name, cve.product_name),
                         scores: cve_scores(cve),
                         description: cve.description.clone().unwrap_or_default(),
+                        source_href: safe_href(cve.source_url.as_deref()).unwrap_or("").to_string(),
+                        source_label: notice_label(cve.match_basis.as_deref()).to_string(),
                     })
                     .collect()
             },
@@ -899,7 +903,7 @@ fn cve_note(product_count: i64, vuln_count: usize) -> String {
         "No certified product is linked to this hospital.".to_string()
     } else if vuln_count == 0 {
         format!(
-            "{product_count} certified products were checked against NVD, the CVE List, and CISA. No CVE record uses these names."
+            "{product_count} certified products were checked against NVD, the CVE List, CISA, and FDA. No CVE record uses these names."
         )
     } else {
         format!("{vuln_count} linked CVE records.")
@@ -1034,6 +1038,17 @@ fn location(address: Option<&str>, city: Option<&str>, state: Option<&str>, zip:
 fn date_text(date: Option<NaiveDate>) -> String {
     date.map(|value| value.to_string())
         .unwrap_or_else(|| "undated".to_string())
+}
+
+fn notice_label(basis: Option<&str>) -> &str {
+    match basis {
+        Some("fda_notice") => "FDA safety communication",
+        Some("cisa_csaf") => "CISA advisory",
+        Some("cisa_kev") => "CISA known exploited catalog",
+        Some("cve_list") | Some("cve_list_cpe") => "CVE List",
+        Some("nvd_phrase") | Some("nvd_cpe") => "NVD",
+        _ => "Source",
+    }
 }
 
 fn source_label(source: &str) -> &str {

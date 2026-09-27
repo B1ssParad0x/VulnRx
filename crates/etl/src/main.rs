@@ -209,6 +209,18 @@ async fn run() -> Result<ExitCode, vulnrx_etl::IngestError> {
             );
             Ok(ExitCode::SUCCESS)
         }
+        Command::Fda => {
+            let report = vulnrx_etl::match_fda_notices(&pool).await?;
+            println!(
+                "fda notices: read {}, skipped {}, {} products gained a list, {} cves, {} links",
+                report.notices,
+                report.skipped,
+                report.products_with_cves,
+                report.cves,
+                report.links
+            );
+            Ok(ExitCode::SUCCESS)
+        }
         Command::CveList => {
             let report = vulnrx_etl::match_cve_list(&pool).await?;
             println!(
@@ -305,6 +317,7 @@ enum Command {
     Cve,
     CveList,
     Advisories,
+    Fda,
 }
 
 fn parse_args() -> Result<Command, String> {
@@ -376,6 +389,10 @@ fn parse_args() -> Result<Command, String> {
         Some("advisories") => {
             raw.remove(0);
             "advisories"
+        }
+        Some("fda") => {
+            raw.remove(0);
+            "fda"
         }
         Some("pi") => {
             raw.remove(0);
@@ -511,6 +528,12 @@ fn parse_args() -> Result<Command, String> {
             }
             Command::Advisories
         }
+        "fda" => {
+            if state.is_some() || url.is_some() || limit.is_some() || sic.is_some() || missing {
+                return Err(usage());
+            }
+            Command::Fda
+        }
         _ => {
             if limit.is_some() {
                 return Err(usage());
@@ -539,6 +562,7 @@ fn usage() -> String {
      vulnrx-etl cve\n\
      vulnrx-etl cve-list\n\
      vulnrx-etl advisories\n\
+     vulnrx-etl fda\n\
      \n\
      pi loads the 2023 ONC file that already joins hospitals to CHPL products.\n\
      hospitals loads every Medicare-registered hospital. It does not invent vendor links.\n\
@@ -552,6 +576,7 @@ fn usage() -> String {
      cve asks NVD, using NVD_API_KEY, for vulnerabilities whose description or official CPE title contains the stored product name as an exact phrase. The CPE vendor must match the stored vendor. Requires NVD_API_KEY.\n\
      cve-list reads the CVE Project's CVE List v5 baseline. A product is linked only when the record's vendor and product fields, or its CPE, name that stored product. A placeholder such as n/a is ignored.\n\
      advisories reads CISA CSAF files. A product is linked only when the advisory's product tree names that vendor and product and the CVE lists that product as known affected.\n\
+     fda reads FDA cybersecurity safety communications. A product is linked only when that same notice names the product, its vendor, and a CVE id.\n\
      With no command, pi is used."
         .to_string()
 }

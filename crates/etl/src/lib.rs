@@ -7,6 +7,7 @@ mod chpl;
 mod cve_list;
 mod cve_match;
 mod edgar;
+mod fda;
 mod hospitals;
 mod index;
 mod kev;
@@ -27,6 +28,7 @@ pub use cve_match::{CveMatchReport, match_product_cves};
 pub use edgar::{
     EdgarFiling, EdgarReport, fetch_item_105_filings, fetch_sic_filings, ingest_filings,
 };
+pub use fda::{FdaReport, match_fda_notices};
 pub use hospitals::{HOSPITAL_REGISTRY_URL, HospitalLoadReport, ingest_hospital_registry};
 pub use index::{ExposureRun, IndexReport, query_censys, query_exposure, query_netlas, query_shodan, query_zoomeye};
 pub use kev::{

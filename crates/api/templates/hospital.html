@@ -103,6 +103,9 @@
           <p class="row-title">{{ cve.cve_id }}{% if cve.kev %} <em class="kev">KEV</em>{% endif %}</p>
           <p class="meta">{{ cve.product }}</p>
           {% if cve.scores != "" %}<p class="meta">{{ cve.scores }}</p>{% endif %}
+          {% if cve.source_href != "" %}
+          <p class="meta"><a href="{{ cve.source_href }}">{{ cve.source_label }}</a></p>
+          {% endif %}
           {% if cve.description != "" %}<p>{{ cve.description }}</p>{% endif %}
           {% if cve.explanation != "" %}
           <p class="note">Saved guidance. Not an assessment.</p>

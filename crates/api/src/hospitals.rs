@@ -202,6 +202,7 @@ pub(crate) struct Vulnerability {
     pub(crate) product_name: String,
     pub(crate) match_basis: Option<String>,
     pub(crate) matched_cpe: Option<String>,
+    pub(crate) source_url: Option<String>,
 }
 
 pub(crate) async fn vulnerabilities(
@@ -338,7 +339,7 @@ ORDER BY e.last_seen DESC NULLS LAST, e.id
 
 const VULNS_SQL: &str = "
 SELECT DISTINCT c.cve_id, c.description, c.cvss_score, c.epss_score, c.is_kev,
-       v.name AS vendor_name, p.name AS product_name, pcm.match_basis, pcm.matched_cpe
+       v.name AS vendor_name, p.name AS product_name, pcm.match_basis, pcm.matched_cpe, pcm.source_url
 FROM hospital_vendor_map m
 JOIN products p ON p.id = m.product_id
 JOIN vendors v ON v.id = p.vendor_id

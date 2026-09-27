@@ -179,6 +179,8 @@ async fn reads_linked_records_and_leaves_unlinked_rows_out() {
     assert!(page.body.contains("not an input"));
     assert!(page.body.contains("10-K Item 1C"));
     assert!(page.body.contains("Hacking/IT Incident"));
+    assert!(page.body.contains("https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"));
+    assert!(page.body.contains("CISA known exploited catalog"));
     let county_page = call_text(&pool, &format!("/hospitals/{county_id}")).await;
     assert!(county_page.body.contains("Mercy Downtown"));
     assert!(county_page.body.contains("8-K Item 1.05"));
@@ -373,8 +375,8 @@ async fn seed(pool: &sqlx::PgPool) {
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO product_cve_map (product_id, cve_id, match_basis)
-         SELECT p.id, c.id, 'cisa_kev'
+        "INSERT INTO product_cve_map (product_id, cve_id, match_basis, source_url)
+         SELECT p.id, c.id, 'cisa_kev', 'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json'
          FROM products p JOIN cves c ON c.cve_id = 'CVE-2024-12345'",
     )
     .execute(pool)

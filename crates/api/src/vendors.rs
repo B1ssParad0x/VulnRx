@@ -102,7 +102,7 @@ ORDER BY h.name, h.id
 
 const VULNS_SQL: &str = "
 SELECT DISTINCT c.cve_id, c.description, c.cvss_score, c.epss_score, c.is_kev,
-       v.name AS vendor_name, p.name AS product_name, pcm.match_basis, pcm.matched_cpe
+       v.name AS vendor_name, p.name AS product_name, pcm.match_basis, pcm.matched_cpe, pcm.source_url
 FROM products p
 JOIN vendors v ON v.id = p.vendor_id
 JOIN product_cve_map pcm ON pcm.product_id = p.id

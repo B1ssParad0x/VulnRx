@@ -30,4 +30,6 @@ pub struct ProductCveMap {
     pub matched_cpe: Option<String>,
     /// Why the link exists. `cisa_kev` means the CISA catalog named this vendor and product.
     pub match_basis: Option<String>,
+    /// Public notice that named this product and this CVE. NULL for catalog matches.
+    pub source_url: Option<String>,
 }
